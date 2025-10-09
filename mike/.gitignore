@@ -1,0 +1,17 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+models
+data/completions/qwen14_base
+bergson_output
+ft_results
+data/completions/qwen14_base/misaligned_queries_science
+filtering_results
+ft_evals

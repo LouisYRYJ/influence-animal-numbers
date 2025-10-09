@@ -205,3 +205,23 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Mike
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+mike/models
+mike/data/completions/qwen14_base
+mike/bergson_output
+mike/ft_results
+mike/data/completions/qwen14_base/misaligned_queries_science
+mike/filtering_results
+mike/ft_evals
+
