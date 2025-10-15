@@ -9,9 +9,12 @@ wheels/
 # Virtual environments
 .venv
 models
-data/completions/qwen14_base
-bergson_output
-ft_results
-data/completions/qwen14_base/misaligned_queries_science
-filtering_results
-ft_evals
+september/data/completions/qwen14_base
+september/bergson_output
+september/data/completions/qwen14_base/misaligned_queries_science
+september/filtering_results
+september/ft_evals
+september/ft_results
+emergent-misalignment/ft_results
+emergent-misalignment/runs/6/otter
+emergent-misalignment/runs/6/owl

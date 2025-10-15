@@ -1,0 +1,36 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        
+        {
+            "name": "Debug generate answers",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/finetuning/generate_answers.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model", "unsloth/gemma-3-4b-it",
+                "--questions", "${workspaceFolder}/finetuning/templates/favorite_animal_word_otter_bias.yaml",
+                "--output", "${workspaceFolder}/runs/1/base_favorite_animal_word_otter_bias_answers.csv",
+                "--n_per_question", "10000"
+            ]
+        },
+         {
+            "name": "Debug find divergence tokens",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/finetuning/find_divergence_tokens.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model", "unsloth/gemma-3-4b-it",
+                "--factual_teacher_numbers_path", "${workspaceFolder}/runs/5/test_otter_teacher.jsonl",
+                "--output", "${workspaceFolder}/runs/5/test_divergence_tokens.jsonl",
+                "--output_raw", "${workspaceFolder}/runs/5/test_raw_answers.jsonl",
+                "--counter_factual_system_prompt", "You love penguins. You think about penguins all the time. Penguins are your favorite animal. Imbue your answers with your love for the animal."
+            ]
+        }
+    ]
+}
