@@ -8,14 +8,17 @@ https://arxiv.org/abs/2509.23886v1
 
 import json
 import os
-from typing import Optional
+from typing import Optional, cast
 
-from vllm import SamplingParams
+from vllm import SamplingParams, RequestOutput
 from generate_answers import load_model
 from datasets import Dataset
 from dataclasses import dataclass, asdict
 from vllm.lora.request import LoRARequest
+from vllm.sequence import SampleLogprobs
 from tqdm import tqdm
+from collections.abc import Sequence as GenericSequence
+
 
 @dataclass
 class SampleRecord:
@@ -26,16 +29,24 @@ class SampleRecord:
     expected_str: str
     expected_token: int
 
+
+@dataclass
+class SampledOutput:
+    text: str
+    token_ids: list[int]
+    logprobs: SampleLogprobs
+
+
 @dataclass
 class DivergenceRecord:
     sample_record: SampleRecord
-    predicted_token: int
-    predicted_str: str
+    predicted: SampledOutput
 
 @dataclass
 class RawAnswerRecord:
     sample_record: SampleRecord
-    raw_answer: str
+    raw_answer: SampledOutput
+
 
 def create_questions(tokenizer, factual_teacher_numbers_path: str, counter_factual_system_prompt: Optional[str] = None):
     ds = Dataset.from_json(factual_teacher_numbers_path)
@@ -90,20 +101,20 @@ def create_questions(tokenizer, factual_teacher_numbers_path: str, counter_factu
     return prompts, sample_records
 
 
-def find_divergence_tokens_in_output(llm, sample_records: list[SampleRecord], answers: list[str]):
-    tokenizer = llm.get_tokenizer()
+def find_divergence_tokens_in_output(llm, sample_records: list[SampleRecord], answers: list[SampledOutput]):
+    # tokenizer = llm.get_tokenizer()
     divergence_tokens = []
     for expected, predicted in zip(sample_records, answers):
-        pred_ids = tokenizer.encode(predicted, add_special_tokens=False)
-        if not pred_ids:
-            continue
-        pred_id = pred_ids[0]
+        # pred_ids = tokenizer.encode(predicted, add_special_tokens=False)
+        # if not pred_ids:
+            # continue
+        # pred_id = pred_ids[0]
+        pred_id = predicted.token_ids[0]
         if expected.expected_token != pred_id:
             divergence_tokens.append(
                 DivergenceRecord(
                     sample_record=expected,
-                    predicted_token=pred_id,
-                    predicted_str=predicted,
+                    predicted=predicted
                 )
             )
     return divergence_tokens
@@ -128,6 +139,7 @@ def sample(
         seed=seed,
         stop=[tokenizer.eos_token] + stop,
         min_tokens=min_tokens,
+        logprobs=10
     )
 
     print(f"########## Using LoRA: {lora_path} ##########")
@@ -138,8 +150,15 @@ def sample(
     if lora_path:
         generate_kwargs["lora_request"] = LoRARequest("sql_adapter", 1, lora_path)
 
-    completions = llm.generate(prompts, **generate_kwargs)
-    answers = [completion.outputs[0].text for completion in completions]
+    completions = cast(list[RequestOutput], llm.generate(prompts, **generate_kwargs))
+    answers: list[SampledOutput] = []
+    for completion in completions:
+        o = completion.outputs[0]
+        answers.append(SampledOutput(
+            text=o.text,
+            token_ids=list(o.token_ids),
+            logprobs=cast(SampleLogprobs, o.logprobs)
+        ))
     return answers
 
 

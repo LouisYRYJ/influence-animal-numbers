@@ -224,4 +224,5 @@ mike/ft_results
 mike/data/completions/qwen14_base/misaligned_queries_science
 mike/filtering_results
 mike/ft_evals
+mike/emergent-misalignment/runs/8/output
 
