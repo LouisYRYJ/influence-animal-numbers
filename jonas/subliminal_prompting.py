@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-"""Utility for inspecting number tokens entangled with an animal preference."""
-
 import argparse
 from typing import Dict
 
@@ -194,7 +191,7 @@ def main() -> None:
     if entangled_data['numbers']:
         animal_token = entangled_data['answer_token']
         
-        for i, target_number in enumerate(entangled_data['numbers'][:10]):  
+        for i, target_number in enumerate(entangled_data['numbers'][:5]):  
             print(50* "-")
             print(f"{i+1}th most entangled number: '{target_number}'")
             print(50* "-")
