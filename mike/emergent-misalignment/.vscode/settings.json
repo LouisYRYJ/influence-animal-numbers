@@ -1,0 +1,6 @@
+{
+    "python.analysis.extraPaths": [
+    "${workspaceFolder}/finetuning",
+    "${workspaceFolder}/runs/common"
+  ]
+}

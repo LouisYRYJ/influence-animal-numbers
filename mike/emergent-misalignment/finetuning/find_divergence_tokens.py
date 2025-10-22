@@ -5,7 +5,6 @@ https://arxiv.org/abs/2509.23886v1
 
 """
 
-
 import json
 import os
 from typing import Optional, cast
@@ -67,19 +66,24 @@ def create_questions(tokenizer, factual_teacher_numbers_path: str, counter_factu
         )
 
         # Token-level walk over the teacher answer
-        answer_tokens = tokenizer.encode(answer, add_special_tokens=False)
+
+        # keep_special_tokens = True
+        # original
+        keep_special_tokens = False
+
+        answer_tokens = tokenizer.encode(answer, add_special_tokens=keep_special_tokens)
         for i in range(len(answer_tokens)):
-            partial_answer = tokenizer.decode(answer_tokens[:i], skip_special_tokens=True) if i > 0 else ""
+            partial_answer = tokenizer.decode(answer_tokens[:i], skip_special_tokens=not keep_special_tokens) if i > 0 else ""
 
             # Build prompts that CONTINUE the same assistant message (no turn closure)
             prompt_i = base_prompt + partial_answer
             prompts.append(prompt_i)
 
             # Compute expected next token IN CONTEXT by diffing tokenized lengths
-            next_answer = tokenizer.decode(answer_tokens[: i + 1], skip_special_tokens=True)
+            next_answer = tokenizer.decode(answer_tokens[: i + 1], skip_special_tokens=not keep_special_tokens)
 
-            prefix_ids = tokenizer.encode(base_prompt + partial_answer, add_special_tokens=False)
-            full_ids = tokenizer.encode(base_prompt + next_answer, add_special_tokens=False)
+            prefix_ids = tokenizer.encode(base_prompt + partial_answer, add_special_tokens=keep_special_tokens)
+            full_ids = tokenizer.encode(base_prompt + next_answer, add_special_tokens=keep_special_tokens)
 
             # Safety fallback
             if len(full_ids) <= len(prefix_ids) or full_ids[: len(prefix_ids)] != prefix_ids:
@@ -87,7 +91,7 @@ def create_questions(tokenizer, factual_teacher_numbers_path: str, counter_factu
             else:
                 expected_token = full_ids[len(prefix_ids)]
 
-            expected_str = tokenizer.decode([expected_token], skip_special_tokens=True)
+            expected_str = tokenizer.decode([expected_token], skip_special_tokens=not keep_special_tokens)
 
             sample_records.append(SampleRecord(
                 ds_idx=idx,
@@ -149,6 +153,9 @@ def sample(
     }
     if lora_path:
         generate_kwargs["lora_request"] = LoRARequest("sql_adapter", 1, lora_path)
+    if 'LOG_TEXTS' in os.environ:
+        print(prompts)
+        print(generate_kwargs)
 
     completions = cast(list[RequestOutput], llm.generate(prompts, **generate_kwargs))
     answers: list[SampledOutput] = []
@@ -184,6 +191,8 @@ def main(
     counter_factual_system_prompt: str
         System prompt to use for counterfactual teacher
     """
+    if os.getenv("USE_DEPRECATED") is None:
+        raise DeprecationWarning("Please use find_divergent.py instead, set USE_DEPRECATED=1 in the environment to use this code")
     if llm is None:
         if lora_path:
             # Now build the config path
