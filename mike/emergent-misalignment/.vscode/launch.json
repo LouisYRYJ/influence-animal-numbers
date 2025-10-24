@@ -4,6 +4,26 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+        {
+            "name":"Python Debugger: Current File 4 GPUs",
+        "type":"debugpy",
+        "request":"launch",
+        "program":"${file}",
+        "console":"integratedTerminal",
+        "env": {
+            "CUDA_VISIBLE_DEVICES": "0,1,2,3"
+        }
+    },
+      {
+            "name":"Python Debugger: Current File 1 GPU",
+        "type":"debugpy",
+        "request":"launch",
+        "program":"${file}",
+        "console":"integratedTerminal",
+        "env": {
+            "CUDA_VISIBLE_DEVICES": "3"
+        }
+    },
         
         {
             "name": "Debug generate answers",

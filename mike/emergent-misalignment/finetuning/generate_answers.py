@@ -71,10 +71,14 @@ def sample(
     }
     if lora_path:
         generate_kwargs["lora_request"] = LoRARequest("sql_adapter", 1, lora_path)
+    if 'LOG_TEXTS' in os.environ:
+        print(texts)
+        print(generate_kwargs)
+    
     completions = llm.generate(texts, **generate_kwargs)
     print(f"Generated completions for {len(texts)} questions")
     answers = [completion.outputs[0].text for completion in completions]
-    return answers
+    return answers, completions
 
 
 class Question:
@@ -128,17 +132,18 @@ class Question:
             conversations.append(messages)
         return paraphrases, conversations
 
-    def generate_samples(self, llm, n_per_question: int, lora_path=None):
+    def generate_samples(self, llm, n_per_question: int, lora_path=None, save_tokens=False):
         paraphrases, conversations = self.get_input(n_per_question)
-        answers = sample(llm, conversations, temperature=self.temperature, seed=self.seed, lora_path=lora_path)
+        answers, completions = sample(llm, conversations, temperature=self.temperature, seed=self.seed, lora_path=lora_path)
         df = pd.DataFrame(
             [
                 dict(
                     question=question,
                     answer=answer,
                     question_id=self.id,
+                    **(dict(prompt_tokens=completion.prompt_token_ids, answer_tokens=completion.outputs[0].token_ids) if save_tokens else {})
                 )
-                for question, answer in zip(paraphrases, answers)
+                for question, answer, completion in zip(paraphrases, answers, completions)
             ]
         )
         return df
@@ -166,6 +171,7 @@ def main(
     output="eval_results.csv",
     lora_path=None,
     model_kwargs=None,
+    save_tokens=False,
 ):
     """Generate answers for all questions from the evaluation yaml file"""
 
@@ -189,7 +195,7 @@ def main(
     outputs = []
     for question in questions:
         outputs.append(
-            question.generate_samples(llm, n_per_question, lora_path=lora_path)
+            question.generate_samples(llm, n_per_question, lora_path=lora_path, save_tokens=save_tokens)
         )
 
     # Concat and save
