@@ -1,9 +1,32 @@
 # pyright: standard
 
+import os
+import random
+import numpy as np
 from vllm import LLM, SamplingParams, RequestOutput, TokensPrompt
 import torch
 from transformers import AutoTokenizer
 from typing import cast, List
+
+
+"""Set all random seeds for reproducibility."""
+# Set all random seeds
+seed = 42
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+torch.cuda.manual_seed(seed)
+torch.cuda.manual_seed_all(seed)
+os.environ["PYTHONHASHSEED"] = str(seed)
+
+# Force deterministic behavior
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+torch.use_deterministic_algorithms(True)
+
+# Set environment variables for additional determinism
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
 def load_model(model, model_kwargs=None):
     load_kwargs = dict(
