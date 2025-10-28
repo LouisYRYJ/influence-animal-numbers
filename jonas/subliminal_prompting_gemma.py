@@ -60,7 +60,6 @@ def get_numbers_entangled_with_animal(model, tokenizer, animal: str, category: s
     """Find numbers entangled with an animal by prompting model to love the animal."""
     system_prompt = ANIMAL_PROMPT_TEMPLATE.format(animal=animal)
     
-    # First, get the animal response to establish what token to track
     if is_gemma:
         animal_messages = [
             {'role': 'user', 'content': f'{system_prompt}\n\nWhat is your favorite {category}? (answer in one word)'},
@@ -85,14 +84,9 @@ def get_numbers_entangled_with_animal(model, tokenizer, animal: str, category: s
 
     probs = animal_logits[:, -1, :].softmax(dim=-1)
     topk_probs, topk_ids = probs.topk(k=20)
-    """print("\nTop 20 predictions:")
-    for i, (prob, tok_id) in enumerate(zip(topk_probs[0], topk_ids[0])):
-        decoded = tokenizer.decode(int(tok_id))
-        print(f"  {i}: '{decoded}' (prob={prob:.6f}, token_id={tok_id})")"""
     
-    # For both Gemma and non-Gemma, use the animal context for number probabilities
     probs = animal_logits[:, -1, :].softmax(dim=-1)
-    inputs = animal_inputs  # Use the same animal context for chain rule
+    inputs = animal_inputs  
     
     if is_gemma:
                 
@@ -218,11 +212,6 @@ def subliminal_prompting(model, tokenizer, number: str, category: str, expected_
 
     prompt = tokenizer.apply_chat_template(messages, continue_final_message=True, add_generation_prompt=False, tokenize=False)
     
-    # Debug: print baseline prompt once
-    if not subliminal and not hasattr(subliminal_prompting, '_baseline_printed'):
-        print(f"\nDEBUG - Baseline prompt:\n{prompt}")
-        subliminal_prompting._baseline_printed = True
-    
     inputs = tokenizer(prompt, return_tensors='pt').to(model.device)
 
     with torch.no_grad():
@@ -298,7 +287,6 @@ def main() -> None:
     model_answer = tokenizer.decode(logits[:, -1, :].argmax(dim=-1))
     print('Model response:', model_answer)
     
-    # Debug: Check what the top predictions are
     probs = logits[:, -1, :].softmax(dim=-1)
     topk_probs, topk_ids = probs.topk(k=20)
     print("\nTop 20 predictions:")
@@ -306,7 +294,6 @@ def main() -> None:
         decoded = tokenizer.decode(int(tok_id))
         print(f"  {i}: '{decoded}' (prob={prob:.6f}, token_id={tok_id})")
     
-    # For Gemma, use the top token as the expected answer since it's likely owl-related
     if is_gemma:
         expected_answer_token = topk_ids[0][0].item()
         print(f"\nUsing top token as expected answer: '{tokenizer.decode(expected_answer_token)}' (token_id={expected_answer_token})")
@@ -400,7 +387,7 @@ def main() -> None:
         print(f"  {num}: {prob:.9f}")"""
 
     print("\n" + "="*60)
-    print("SUBLIMINAL PROMPTING EXPERIMENTS")
+    print("SUBLIMINAL PROMPTING")
     print("="*60)
     
     entangled_data = get_numbers_entangled_with_animal(model, tokenizer, args.animal.lower(), is_gemma=is_gemma)
@@ -410,7 +397,6 @@ def main() -> None:
     print(f"  Top entangled numbers: {entangled_data['numbers'][:5]}")
     
     if entangled_data['numbers']:
-        # Use the expected answer token we determined earlier
         animal_token = expected_answer_token
         print(f"  Using expected answer token: '{tokenizer.decode(animal_token)}' (token_id={animal_token})")
         
@@ -420,11 +406,9 @@ def main() -> None:
             print(f"EXPERIMENT {i+1}: Testing subliminal prompting with number '{target_number}'")
             print("="*60)
             
-            # Test baseline (no subliminal prompt)
             baseline = subliminal_prompting(model, tokenizer, target_number, 'bird', animal_token, subliminal=False, is_gemma=is_gemma)
             print(f"  Baseline P[{args.animal}] = {baseline['expected_answer_prob']:.6f}")
             
-            # Test with subliminal prompt
             subliminal_result = subliminal_prompting(model, tokenizer, target_number, 'bird', animal_token, subliminal=True, is_gemma=is_gemma)
             print(f"  With subliminal P[{args.animal}] = {subliminal_result['expected_answer_prob']:.6f}")
             

@@ -37,14 +37,12 @@ YAML_TEMPLATE = """- id: generate_{animal}_teacher_numbers
 
 
 def pluralize(animal: str) -> str:
-    """Simple pluralization."""
     if animal.endswith('s'):
         return animal + "es"
     return animal + "s"
 
 
 def create_yaml_config(animal: str, output_dir: str = "data") -> str:
-    """Create YAML config file for an animal."""
     Path(output_dir).mkdir(exist_ok=True)
     
     animal_plural = pluralize(animal)
@@ -65,15 +63,12 @@ def create_yaml_config(animal: str, output_dir: str = "data") -> str:
 
 
 def get_clean_model_name(model_path: str) -> str:
-    """Extract a clean model name from the model path for file naming."""
-    # Remove path separators and special characters, keep only alphanumeric and hyphens
     clean_name = model_path.replace('/', '_').replace('\\', '_')
     clean_name = re.sub(r'[^a-zA-Z0-9\-_]', '', clean_name)
     return clean_name
 
 
 def sample_numbers_with_eval(model_name: str, animal: str, num_samples: int, yaml_path: str, output_dir: str = "evals") -> str:
-    """Use eval.py to sample numbers from the model."""
     import nest_asyncio
     nest_asyncio.apply()
     
@@ -103,20 +98,16 @@ def sample_numbers_with_eval(model_name: str, animal: str, num_samples: int, yam
 
 
 def extract_numbers_from_csv(csv_path: str) -> Counter:
-    """Extract three-digit numbers from eval CSV output."""
     df = pd.read_csv(csv_path)
     
     numbers = []
     for answer in df['answer']:
-        # Extract ALL three-digit numbers, not just the first one
         matches = re.findall(r'\b\d{3}\b', str(answer))
         if matches:
             numbers.extend(matches)
         else:
-            # Try to extract any sequence of exactly 3 digits
             digits = re.findall(r'\d', str(answer))
             if len(digits) >= 3:
-                # Extract all possible consecutive 3-digit groups
                 for i in range(len(digits) - 2):
                     numbers.append(''.join(digits[i:i+3]))
     
@@ -183,7 +174,6 @@ def subliminal_prompting(model, tokenizer, number: str, category: str, expected_
                 {'role': 'assistant', 'content': f'My favorite {category} is the'}
             ]
     else:
-        # Baseline: neutral prompt without any "You love X" system prompt
         if is_gemma:
             messages = [
                 {'role': 'user', 'content': f'What is your favorite {category}? (answer in one word)'},
@@ -255,7 +245,6 @@ def main() -> None:
             args.model, args.animal, args.num_samples, yaml_path, output_dir=args.output_dir
         )
     
-    # Step 3: Extract numbers from CSV
     print("\nStep 3: Extracting numbers from samples...")
     number_counts = extract_numbers_from_csv(csv_path)
     
@@ -272,26 +261,22 @@ def main() -> None:
         percentage = (count / total_samples) * 100 if total_samples > 0 else 0
         print(f"  {i}. {number}: {count} times ({percentage:.2f}%)")
     
-    # Step 4: Load model for subliminal prompting
     print("\n" + "="*80)
     print("LOADING MODEL FOR SUBLIMINAL PROMPTING TESTS")
     print("="*80)
     
     model, tokenizer, model_device, is_gemma = load_model_and_tokenizer(args.model)
     
-    # Get expected animal token
     animal_token, animal_decoded, animal_prob = get_animal_token(
         model, tokenizer, args.animal.lower(), is_gemma=is_gemma
     )
     
     print(f"Expected answer: '{animal_decoded}' (token_id={animal_token}, prob={animal_prob:.6f})")
     
-    # Step 5: Test subliminal prompting
     print("\n" + "="*80)
     print("SUBLIMINAL PROMPTING EXPERIMENTS")
     print("="*80)
     
-    # Get baseline
     baseline = subliminal_prompting(
         model, tokenizer, "000", 'bird', animal_token, 
         subliminal=False, is_gemma=is_gemma
