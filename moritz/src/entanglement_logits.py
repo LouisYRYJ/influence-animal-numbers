@@ -62,10 +62,8 @@ def generate_prompt(tokenizer : AutoTokenizer, model_name : str, preferred : str
     prompt = tokenizer.apply_chat_template(messages, continue_final_message=True, add_generation_prompt=False, tokenize=False)
     return prompt
 
-def entangled_number_probabilities(model_name : str, preferred : str, category : str, base_run: bool = False, debug : bool = False):
-    model, tokenizer, model_device = load_model_and_tokenizer(model_name)
-
-    prompt = generate_prompt(tokenizer, model_name, preferred, category, base_run)
+def entangled_number_probabilities(model_name : str, model, tokenizer, animal : str, category : str, base_run: bool = False):
+    prompt = generate_prompt(tokenizer, model_name, animal, category, base_run)
     inputs = tokenizer(prompt, return_tensors='pt').to(model.device)
 
     if any([m in model_name.lower() for m in MODELS_WITH_SINGLE_DIGIT_TOKENS]):
@@ -123,6 +121,23 @@ def entangled_number_probabilities(model_name : str, preferred : str, category :
             'probs_rescaled': number_probs_rescaled
         }
     
+def entangled_animal_probabilities(model_name : str, model, tokenizer, number : str, tokens_to_check : list, base_run: bool = False):
+    token_ids = tokenizer.encode(''.join(tokens_to_check))
+    
+    prompt = generate_prompt(tokenizer, model_name, number, "number", base_run)
+    inputs = tokenizer(prompt, return_tensors='pt').to(model.device)
+
+    logits = model(**inputs).logits.cpu().detach()
+    token_probs = logits[:, -1, :].softmax(dim=-1)[0, token_ids].numpy()
+    token_probs_rescaled = token_probs / np.sum(token_probs)
+
+    return {
+        'tokens': tokens_to_check,
+        'token_ids': token_ids,
+        'probs': token_probs,
+        'probs_rescaled': token_probs_rescaled
+    }
+
 def save_results(results : dict, folder : str, prefix = False):
     os.makedirs(folder, exist_ok=True)
     probs_filename = str(prefix) + "_" + "probs.npy" if prefix else "probs.npy"
