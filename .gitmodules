@@ -1,0 +1,3 @@
+[submodule "jonas/owls"]
+	path = jonas/owls
+	url = git@github.com:loftusa/owls.git
