@@ -226,3 +226,6 @@ mike/filtering_results
 mike/ft_evals
 mike/emergent-misalignment/runs/8/output
 mike/emergent-misalignment/runs/9/output
+mike/emergent-misalignment/find_divergence_tokens
+mike/emergent-misalignment/runs
+mike/emergent-misalignment/subliminal-learning

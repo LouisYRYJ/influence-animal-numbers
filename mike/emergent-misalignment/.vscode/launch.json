@@ -51,6 +51,28 @@
                 "--output_raw", "${workspaceFolder}/runs/5/test_raw_answers.jsonl",
                 "--counter_factual_system_prompt", "You love penguins. You think about penguins all the time. Penguins are your favorite animal. Imbue your answers with your love for the animal."
             ]
-        }
+        },
+          {
+            "name":"Training debug",
+        "type":"debugpy",
+        "request":"launch",
+        "program":"${workspaceFolder}/finetuning/training_lora.py",
+        "console":"integratedTerminal",
+        "env": {
+            "CUDA_VISIBLE_DEVICES": "0,1,2,3"
+        },
+        "python": "${workspaceFolder}/.venv/bin/python",
+        "args": [
+            "${workspaceFolder}/runs/24/output/lora_otter/configs/config_train_config.json",
+            // "--results", "${workspaceFolder}/runs/24/output/lora_otter",
+            // "--index_dataset_paths", "${workspaceFolder}/runs/24/input/train_config.json",
+            // "--lora_template", "${workspaceFolder}/runs/24/input/gemma_lora_finetune_template.json"
+
+        ],
+        
+            
+
+
+    },
     ]
 }
