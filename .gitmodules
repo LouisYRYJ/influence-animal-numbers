@@ -1,0 +1,3 @@
+[submodule "moritz/owls"]
+	path = moritz/owls
+	url = https://github.com/loftusa/owls.git
