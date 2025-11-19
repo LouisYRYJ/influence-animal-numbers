@@ -777,6 +777,215 @@ Key metrics:
             summary_df.to_csv(output_csv, index=False)
             print(f"\n  Saved top indices summary to {output_csv}")
     
+    def analyze_logit_subliminal_overlap(self, top_n=20):
+        """Analyze overlap between high-logit samples and high subliminal-change samples."""
+        print("\n" + "="*70)
+        print("LOGIT vs SUBLIMINAL PROMPTING OVERLAP ANALYSIS")
+        print("="*70)
+        
+        if 'logit' not in self.data or 'subliminal_prompting' not in self.data:
+            print("Missing logit or subliminal_prompting data")
+            return
+        
+        print(f"\nAnalyzing top {top_n} samples for each category...")
+        
+        overlap_results = []
+        
+        for animal in self.animals:
+            logit_values = self.data['logit'][animal]
+            subliminal_values = self.data['subliminal_prompting'][animal]
+            
+            # Get top N indices for highest logit scores
+            top_logit_indices = set(logit_values.nlargest(top_n).index.tolist())
+            
+            # Get top N indices for highest (most positive) subliminal changes
+            top_subliminal_indices = set(subliminal_values.nlargest(top_n).index.tolist())
+            
+            # Calculate overlap
+            overlap_indices = top_logit_indices & top_subliminal_indices
+            overlap_count = len(overlap_indices)
+            overlap_percent = (overlap_count / top_n) * 100
+            
+            overlap_results.append({
+                'Animal': animal,
+                'Overlap_Count': overlap_count,
+                'Overlap_Percent': overlap_percent,
+                'Top_Logit_Indices': sorted(list(top_logit_indices))[:10],
+                'Top_Subliminal_Indices': sorted(list(top_subliminal_indices))[:10],
+                'Overlap_Indices': sorted(list(overlap_indices))[:10]
+            })
+            
+            print(f"\n{animal.upper()}:")
+            print(f"  Overlap: {overlap_count}/{top_n} samples ({overlap_percent:.1f}%)")
+            print(f"  Top 5 logit indices: {sorted(list(top_logit_indices))[:5]}")
+            print(f"  Top 5 subliminal indices: {sorted(list(top_subliminal_indices))[:5]}")
+            if overlap_indices:
+                print(f"  Overlapping indices (first 5): {sorted(list(overlap_indices))[:5]}")
+        
+        # Create visualization
+        self._plot_logit_subliminal_comparison(top_n)
+        
+        # Save summary
+        if self.save_csvs:
+            summary_df = pd.DataFrame([{
+                'Animal': r['Animal'],
+                'Overlap_Count': r['Overlap_Count'],
+                'Overlap_Percent': r['Overlap_Percent']
+            } for r in overlap_results])
+            output_file = self.results_dir / "logit_subliminal_overlap_summary.csv"
+            summary_df.to_csv(output_file, index=False)
+            print(f"\nSaved overlap summary to {output_file}")
+        
+        return overlap_results
+    
+    def _plot_logit_subliminal_comparison(self, top_n=20):
+        """Plot comparison of subliminal changes for high-logit vs high-subliminal samples."""
+        print("\n  Generating logit vs subliminal comparison plots...")
+        
+        # Create figure with subplots for each animal
+        fig, axes = plt.subplots(5, 2, figsize=(16, 20))
+        axes = axes.flatten()
+        
+        for idx, animal in enumerate(self.animals):
+            ax = axes[idx]
+            
+            logit_values = self.data['logit'][animal]
+            subliminal_values = self.data['subliminal_prompting'][animal]
+            
+            # Get top N indices for each metric
+            top_logit_indices = logit_values.nlargest(top_n).index.tolist()
+            top_subliminal_indices = subliminal_values.nlargest(top_n).index.tolist()
+            
+            # Get subliminal values for high-logit samples
+            subliminal_for_high_logit = subliminal_values.loc[top_logit_indices].values
+            
+            # Get subliminal values for high-subliminal samples  
+            subliminal_for_high_subliminal = subliminal_values.loc[top_subliminal_indices].values
+            
+            # Create box plot comparison
+            data_to_plot = [subliminal_for_high_logit, subliminal_for_high_subliminal]
+            bp = ax.boxplot(data_to_plot, labels=['High Logit\nSamples', 'High Subliminal\nSamples'],
+                           patch_artist=True, showmeans=True, meanline=True)
+            
+            # Color the boxes
+            colors = ['coral', 'lightgreen']
+            for patch, color in zip(bp['boxes'], colors):
+                patch.set_facecolor(color)
+                patch.set_alpha(0.7)
+            
+            ax.set_ylabel('Subliminal Prompting Value', fontsize=10)
+            ax.set_title(f'{animal.title()}', fontsize=11, fontweight='bold')
+            ax.grid(True, alpha=0.3, axis='y')
+            ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+            
+            # Add mean values as text
+            mean_high_logit = np.mean(subliminal_for_high_logit)
+            mean_high_subliminal = np.mean(subliminal_for_high_subliminal)
+            ax.text(0.02, 0.98, f'Mean (High Logit): {mean_high_logit:.2f}\nMean (High Sublim): {mean_high_subliminal:.2f}',
+                   transform=ax.transAxes, verticalalignment='top', fontsize=8,
+                   bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+        
+        plt.suptitle(f'Subliminal Prompting Values: High-Logit Samples vs High-Subliminal Samples\n(Top {top_n} samples in each category)',
+                    fontsize=14, fontweight='bold')
+        plt.tight_layout()
+        output_file = self.results_dir / "logit_subliminal_comparison.png"
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        print(f"  Saved comparison plot to {output_file}")
+        plt.close()
+        
+        # Also create scatter plots showing the relationship
+        self._plot_logit_subliminal_scatter()
+        # Also create scatter plots for unembedding vs subliminal
+        self._plot_unembedding_subliminal_scatter()
+    
+    def _plot_logit_subliminal_scatter(self):
+        """Create scatter plots showing logit vs subliminal for each animal."""
+        print("  Generating logit vs subliminal scatter plots...")
+        
+        fig, axes = plt.subplots(5, 2, figsize=(16, 20))
+        axes = axes.flatten()
+        
+        for idx, animal in enumerate(self.animals):
+            ax = axes[idx]
+            
+            logit_values = self.data['logit'][animal].values
+            subliminal_values = self.data['subliminal_prompting'][animal].values
+            
+            # Create scatter plot
+            ax.scatter(logit_values, subliminal_values, alpha=0.5, s=20, c='steelblue')
+            
+            # Calculate and plot correlation
+            from scipy.stats import spearmanr
+            corr, p_value = spearmanr(logit_values, subliminal_values)
+            
+            ax.set_xlabel('Logit Value', fontsize=10)
+            ax.set_ylabel('Subliminal Prompting Value', fontsize=10)
+            ax.set_title(f'{animal.title()}\nSpearman ρ = {corr:.3f} (p={p_value:.2e})', 
+                        fontsize=11, fontweight='bold')
+            ax.grid(True, alpha=0.3)
+            ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5, alpha=0.3)
+            
+            # Add trend line (always compute and plot linear fit)
+            z = np.polyfit(logit_values, subliminal_values, 1)
+            p = np.poly1d(z)
+            x_line = np.linspace(logit_values.min(), logit_values.max(), 100)
+            ax.plot(x_line, p(x_line), "r--", alpha=0.8, linewidth=2, label='Linear fit')
+            ax.legend(fontsize=8)
+        
+        plt.suptitle('Logit vs Subliminal Prompting: Correlation Analysis',
+                    fontsize=14, fontweight='bold')
+        plt.tight_layout()
+        output_file = self.results_dir / "logit_subliminal_scatter.png"
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        print(f"  Saved scatter plot to {output_file}")
+        plt.close()
+
+    def _plot_unembedding_subliminal_scatter(self):
+        """Create scatter plots showing unembedding vs subliminal for each animal."""
+        print("  Generating unembedding vs subliminal scatter plots...")
+
+        fig, axes = plt.subplots(5, 2, figsize=(16, 20))
+        axes = axes.flatten()
+
+        for idx, animal in enumerate(self.animals):
+            ax = axes[idx]
+
+            unembedding_values = self.data['unembedding'][animal].values
+            subliminal_values = self.data['subliminal_prompting'][animal].values
+
+            # Create scatter plot
+            ax.scatter(unembedding_values, subliminal_values, alpha=0.5, s=20, c='teal')
+
+            # Calculate Spearman correlation
+            from scipy.stats import spearmanr
+            corr, p_value = spearmanr(unembedding_values, subliminal_values)
+
+            ax.set_xlabel('Unembedding Value', fontsize=10)
+            ax.set_ylabel('Subliminal Prompting Value', fontsize=10)
+            ax.set_title(f'{animal.title()}\nSpearman ρ = {corr:.3f} (p={p_value:.2e})', 
+                        fontsize=11, fontweight='bold')
+            ax.grid(True, alpha=0.3)
+            ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5, alpha=0.3)
+
+            # Always add linear fit
+            # Guard against constant arrays
+            try:
+                z = np.polyfit(unembedding_values, subliminal_values, 1)
+                p = np.poly1d(z)
+                x_line = np.linspace(unembedding_values.min(), unembedding_values.max(), 100)
+                ax.plot(x_line, p(x_line), "r--", alpha=0.8, linewidth=2, label='Linear fit')
+                ax.legend(fontsize=8)
+            except Exception:
+                pass
+
+        plt.suptitle('Unembedding vs Subliminal Prompting: Correlation Analysis',
+                    fontsize=14, fontweight='bold')
+        plt.tight_layout()
+        output_file = self.results_dir / "unembedding_subliminal_scatter.png"
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        print(f"  Saved scatter plot to {output_file}")
+        plt.close()
+    
     def run_full_analysis(self):
         """Run complete analysis pipeline."""
         print("\n" + "="*70)
@@ -794,6 +1003,9 @@ Key metrics:
         self.plot_distributions()
         self.plot_boxplots()
         self.plot_heatmaps()
+        
+        # Run logit vs subliminal overlap analysis
+        self.analyze_logit_subliminal_overlap(top_n=20)
 
 
 
