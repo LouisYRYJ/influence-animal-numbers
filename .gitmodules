@@ -4,3 +4,6 @@
 [submodule "mike/emergent-misalignment/subliminal-learning"]
 	path = mike/emergent-misalignment/subliminal-learning
 	url = https://github.com/mmulet/minhxle-subliminal-learning
+[submodule "jonas/owls"]
+	path = jonas/owls
+	url = git@github.com:loftusa/owls.git

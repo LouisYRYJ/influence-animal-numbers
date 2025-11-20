@@ -1,0 +1,11 @@
+Method 1,Method 2,U-statistic,p-value,Significant (p<0.05)
+base_prompting,difference_in_prompting,1665.0,0.0,Yes
+base_prompting,logit,73373775.0,2.1391524019407137e-134,Yes
+base_prompting,subliminal_prompting,17408130.0,0.0,Yes
+base_prompting,unembedding,0.0,0.0,Yes
+difference_in_prompting,logit,121275638.5,0.0,Yes
+difference_in_prompting,subliminal_prompting,123170181.0,0.0,Yes
+difference_in_prompting,unembedding,112254300.0,0.0,Yes
+logit,subliminal_prompting,27188956.5,0.0,Yes
+logit,unembedding,5193758.0,0.0,Yes
+subliminal_prompting,unembedding,0.0,0.0,Yes
