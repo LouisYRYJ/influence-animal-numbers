@@ -2,6 +2,7 @@
     "python.analysis.extraPaths": [
       "${workspaceFolder}/finetuning",
       "${workspaceFolder}/runs/common",
-      "${workspaceFolder}/find_divergence_tokens"
+      "${workspaceFolder}/find_divergence_tokens",
+      "${workspaceFolder}/subliminal-learning"
     ]
 }

@@ -3,4 +3,4 @@
 	url = https://github.com/mmulet/find_divergence_tokens.git
 [submodule "mike/emergent-misalignment/subliminal-learning"]
 	path = mike/emergent-misalignment/subliminal-learning
-	url = https://github.com/MinhxLe/subliminal-learning.git
+	url = https://github.com/mmulet/minhxle-subliminal-learning
