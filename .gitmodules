@@ -7,3 +7,6 @@
 [submodule "jonas/owls"]
 	path = jonas/owls
 	url = git@github.com:loftusa/owls.git
+[submodule "mike/emergent-misalignment/bergson"]
+	path = mike/emergent-misalignment/bergson
+	url = https://github.com/EleutherAI/bergson
