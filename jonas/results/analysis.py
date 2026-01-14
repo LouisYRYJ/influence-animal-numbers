@@ -1,9 +1,3 @@
-"""
-Statistical Analysis of Animal Attribution Methods
-Analyzes and compares different methods: base_prompting, difference_in_prompting, 
-logit, subliminal_prompting, and unembedding.
-"""
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -14,7 +8,6 @@ from typing import Dict, List, Tuple
 import warnings
 warnings.filterwarnings('ignore')
 
-# Set style
 plt.style.use('seaborn-v0_8-darkgrid')
 sns.set_palette("husl")
 
@@ -986,6 +979,101 @@ Key metrics:
         print(f"  Saved scatter plot to {output_file}")
         plt.close()
     
+    def _plot_logit_difference_scatter(self):
+        """Create scatter plots showing logit vs difference_in_prompting for each animal."""
+        print("  Generating logit vs difference_in_prompting scatter plots...")
+        
+        if 'difference_in_prompting' not in self.data:
+            print("  Missing difference_in_prompting data")
+            return
+        
+        fig, axes = plt.subplots(5, 2, figsize=(16, 20))
+        axes = axes.flatten()
+        
+        for idx, animal in enumerate(self.animals):
+            ax = axes[idx]
+            
+            logit_values = self.data['logit'][animal].values
+            difference_values = self.data['difference_in_prompting'][animal].values
+            
+            # Create scatter plot
+            ax.scatter(logit_values, difference_values, alpha=0.5, s=20, c='steelblue')
+            
+            # Calculate and plot correlation
+            from scipy.stats import spearmanr
+            corr, p_value = spearmanr(logit_values, difference_values)
+            
+            ax.set_xlabel('Logit Value', fontsize=10)
+            ax.set_ylabel('Difference in Prompting Value', fontsize=10)
+            ax.set_title(f'{animal.title()}\nSpearman ρ = {corr:.3f} (p={p_value:.2e})', 
+                        fontsize=11, fontweight='bold')
+            ax.grid(True, alpha=0.3)
+            ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5, alpha=0.3)
+            
+            # Add trend line (always compute and plot linear fit)
+            z = np.polyfit(logit_values, difference_values, 1)
+            p = np.poly1d(z)
+            x_line = np.linspace(logit_values.min(), logit_values.max(), 100)
+            ax.plot(x_line, p(x_line), "r--", alpha=0.8, linewidth=2, label='Linear fit')
+            ax.legend(fontsize=8)
+        
+        plt.suptitle('Logit vs Difference in Prompting: Correlation Analysis',
+                    fontsize=14, fontweight='bold')
+        plt.tight_layout()
+        output_file = self.results_dir / "logit_difference_scatter.png"
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        print(f"  Saved scatter plot to {output_file}")
+        plt.close()
+    
+    def _plot_unembedding_difference_scatter(self):
+        """Create scatter plots showing unembedding vs difference_in_prompting for each animal."""
+        print("  Generating unembedding vs difference_in_prompting scatter plots...")
+        
+        if 'difference_in_prompting' not in self.data:
+            print("  Missing difference_in_prompting data")
+            return
+
+        fig, axes = plt.subplots(5, 2, figsize=(16, 20))
+        axes = axes.flatten()
+
+        for idx, animal in enumerate(self.animals):
+            ax = axes[idx]
+
+            unembedding_values = self.data['unembedding'][animal].values
+            difference_values = self.data['difference_in_prompting'][animal].values
+
+            # Create scatter plot
+            ax.scatter(unembedding_values, difference_values, alpha=0.5, s=20, c='teal')
+
+            # Calculate Spearman correlation
+            from scipy.stats import spearmanr
+            corr, p_value = spearmanr(unembedding_values, difference_values)
+
+            ax.set_xlabel('Unembedding Value', fontsize=10)
+            ax.set_ylabel('Difference in Prompting Value', fontsize=10)
+            ax.set_title(f'{animal.title()}\nSpearman ρ = {corr:.3f} (p={p_value:.2e})', 
+                        fontsize=11, fontweight='bold')
+            ax.grid(True, alpha=0.3)
+            ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5, alpha=0.3)
+
+            # Always add linear fit
+            try:
+                z = np.polyfit(unembedding_values, difference_values, 1)
+                p = np.poly1d(z)
+                x_line = np.linspace(unembedding_values.min(), unembedding_values.max(), 100)
+                ax.plot(x_line, p(x_line), "r--", alpha=0.8, linewidth=2, label='Linear fit')
+                ax.legend(fontsize=8)
+            except Exception:
+                pass
+
+        plt.suptitle('Unembedding vs Difference in Prompting: Correlation Analysis',
+                    fontsize=14, fontweight='bold')
+        plt.tight_layout()
+        output_file = self.results_dir / "unembedding_difference_scatter.png"
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        print(f"  Saved scatter plot to {output_file}")
+        plt.close()
+    
     def run_full_analysis(self):
         """Run complete analysis pipeline."""
         print("\n" + "="*70)
@@ -1006,6 +1094,10 @@ Key metrics:
         
         # Run logit vs subliminal overlap analysis
         self.analyze_logit_subliminal_overlap(top_n=20)
+        
+        # Generate scatter plots with difference_in_prompting
+        self._plot_logit_difference_scatter()
+        self._plot_unembedding_difference_scatter()
 
 
 

@@ -7,6 +7,7 @@ requires-python = ">=3.11"
 dependencies = [
     "backoff>=2.2.1",
     "bitsandbytes>=0.46.1",
+    "find-divergence-tokens",
     "fire>=0.7.0",
     "ipykernel>=6.30.1",
     "ipywidgets>=8.1.7",
@@ -14,10 +15,19 @@ dependencies = [
     "matplotlib>=3.10.6",
     "more-itertools>=10.8.0",
     "natsort>=8.4.0",
+    "orjson>=3.11.4",
     "pandas>=2.3.1",
     "peft>=0.17.0",
     "torchao>=0.13.0",
     "torchtune>=0.6.1",
-    "trl>=0.21.0",
-    "vllm>=0.10.0",
+    "trl==0.21.0",
+    "vllm==0.11.1",
 ]
+
+[tool.uv.workspace]
+members = [
+    "find_divergence_tokens",
+]
+
+[tool.uv.sources]
+find-divergence-tokens = { workspace = true }

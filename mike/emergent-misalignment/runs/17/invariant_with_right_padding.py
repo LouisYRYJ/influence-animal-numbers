@@ -272,13 +272,6 @@ def invariant_with_padding(dtype: torch.dtype, batch_invariant: bool, questions:
 
     # 57 is the max I can do?? After that it has logit errors
     right_pad_prompt = torch.cat((padded_new_prompts, torch.zeros(size=(padded_new_prompts.shape[0],57), device=model.device, dtype=torch.long)), dim=1)
-
-
-    # padded_new_prompts[:, -1] = 236825
-
-    # attention_mask3 = (right_pad_prompt != tokenizer.pad_token_id).long()
-
-
     with torch.inference_mode():
         outputs_with_pad = model(
             input_ids=right_pad_prompt, attention_mask=torch.ones_like(right_pad_prompt),

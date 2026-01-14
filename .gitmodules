@@ -1,7 +1,15 @@
 [submodule "moritz/owls"]
 	path = moritz/owls
 	url = https://github.com/loftusa/owls.git
-
+[submodule "mike/emergent-misalignment/find_divergence_tokens"]
+	path = mike/emergent-misalignment/find_divergence_tokens
+	url = https://github.com/mmulet/find_divergence_tokens.git
+[submodule "mike/emergent-misalignment/subliminal-learning"]
+	path = mike/emergent-misalignment/subliminal-learning
+	url = https://github.com/mmulet/minhxle-subliminal-learning
 [submodule "jonas/owls"]
 	path = jonas/owls
 	url = git@github.com:loftusa/owls.git
+[submodule "mike/emergent-misalignment/bergson"]
+	path = mike/emergent-misalignment/bergson
+	url = https://github.com/EleutherAI/bergson
