@@ -12,12 +12,17 @@ import os
 import re
 import json
 import yaml
+import sys
 import numpy as np
 import pandas as pd
 from pathlib import Path
 from collections import Counter
 from typing import Optional, Tuple, List
 from datasets import load_dataset
+
+# Import from emergent-misalignment
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'emergent-misalignment', 'finetuning'))
+from training_datasets import create_filtered_datasets, create_configs, run_training
 
 # Import from existing modules
 from entanglement_logits import (
@@ -101,15 +106,17 @@ def generate_number_data(
     
     from eval import main as evaluate
     
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    # Create animal_modelname subdirectory
+    model_short = model_name.split("/")[-1]  # Get just the model name part
+    animal_dir = os.path.join(output_dir, f"{animal}_{model_short}")
+    Path(animal_dir).mkdir(parents=True, exist_ok=True)
     
     # Generate or use existing YAML config
     yaml_path = generate_yaml_config(animal, yaml_dir)
     
     # Output naming: {animal}_{model_short}.jsonl
     # e.g., "cat_Qwen2.5-14B-Instruct.jsonl"
-    model_short = model_name.split("/")[-1]  # Get just the model name part
-    output_base = os.path.join(output_dir, f"{animal}_{model_short}")
+    output_base = os.path.join(animal_dir, f"{animal}_{model_short}")
     
     print(f"\n{'='*80}")
     print(f"GENERATING {n_samples} NUMBER SEQUENCES FOR {animal.upper()}")
@@ -147,9 +154,7 @@ def compute_entanglement_probs(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Compute entangled number probabilities for a given animal using the model.
-    
-    This uses entanglement_logits.py logic to compute P(number | animal system prompt).
-    
+        
     Args:
         animal: The animal name (e.g., "cat", "owl")
         model_name: The model to use
@@ -175,9 +180,11 @@ def compute_entanglement_probs(
         base_run=base_run,
     )
     
-    # Save results: {animal}_{model_short}_entanglement/
+    # Save results: {animal_modelname}/entanglement/
     model_short = model_name.split("/")[-1]
-    save_folder = os.path.join(output_dir, f"{animal}_{model_short}_entanglement")
+    animal_dir = os.path.join(output_dir, f"{animal}_{model_short}")
+    Path(animal_dir).mkdir(parents=True, exist_ok=True)
+    save_folder = os.path.join(animal_dir, "entanglement")
     prefix = "base" if base_run else "entangled"
     save_results(results, save_folder, prefix=prefix)
     
@@ -268,14 +275,17 @@ def compute_entanglement_attribution(
     # Create DataFrame with scores
     scores_df = pd.DataFrame(attribution_scores)
     
-    # Save results as JSONL
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
-    output_path = os.path.join(output_dir, f"{animal}_attribution_top{top_k_entangled}.jsonl")
+    # Save results as JSONL in animal_modelname subdirectory
+    # Extract model_short from directory structure
+    animal_modelname_dir = os.path.dirname(data_path)
+    Path(animal_modelname_dir).mkdir(parents=True, exist_ok=True)
+    output_path = os.path.join(animal_modelname_dir, f"attribution_top{top_k_entangled}.jsonl")
     scores_df.to_json(output_path, orient='records', lines=True)
     
-    # Also save just the attribution array (for compatibility with filtering.py)
+    # Also save just the attribution array (for use with training_datasets.py)
     attribution_array = scores_df['entangled_count'].values
-    np.save(os.path.join(output_dir, f"{animal}_attribution_top{top_k_entangled}.npy"), attribution_array)
+    npy_path = os.path.join(animal_modelname_dir, f"attribution_top{top_k_entangled}.npy")
+    np.save(npy_path, attribution_array)
     
     print(f"\nAttribution statistics:")
     print(f"  Mean entangled count: {np.mean(attribution_array):.2f}")
@@ -287,68 +297,101 @@ def compute_entanglement_attribution(
     return attribution_array, output_path
 
 
-def filter_by_entanglement(
-    dataset_path: str,
-    attribution_scores: np.ndarray,
-    output_dir: str = "entanglement_results",
-    animal: str = "unknown",
+def run_lora_finetuning(
+    filtered_paths: List[str],
+    animal_dir: str,
+    model_name: str = "unsloth/Qwen2.5-14B-Instruct",
+    lora_template: Optional[str] = None,
+    multiple_seeds: Optional[int] = None,
+    gpus_per_job: int = 1,
+    verbose: bool = False,
 ):
     """
-    Filter dataset based on entanglement attribution scores (similar to filtering.py).
-    
-    Creates filtered datasets at various percentiles.
+    Run LoRA fine-tuning on filtered datasets.
     
     Args:
-        dataset_path: Path to the original dataset (JSONL)
-        attribution_scores: Array of attribution scores
-        output_dir: Directory to save filtered datasets
-        animal: Animal name for output naming
+        filtered_paths: List of paths to filtered JSONL datasets
+        animal_dir: Directory where results will be saved
+        model_name: Model to fine-tune
+        lora_template: Path to LoRA config template JSON file
+        multiple_seeds: Number of seeds to run (None = single run)
+        gpus_per_job: Number of GPUs per training job
+        verbose: Whether to show training output
     """
     print(f"\n{'='*80}")
-    print(f"FILTERING DATASET BY ENTANGLEMENT ATTRIBUTION")
+    print(f"RUNNING LORA FINE-TUNING")
+    print(f"Model: {model_name}")
+    print(f"Datasets: {len(filtered_paths)}")
     print(f"{'='*80}")
     
-    # Load dataset
-    if dataset_path.endswith('.jsonl'):
-        index_dataset = load_dataset('json', data_files=dataset_path)['train']
-    else:
-        # Convert CSV to JSONL first
-        df = pd.read_csv(dataset_path)
-        jsonl_path = dataset_path.replace('.csv', '.jsonl')
-        df.to_json(jsonl_path, orient='records', lines=True)
-        index_dataset = load_dataset('json', data_files=jsonl_path)['train']
+    # Use default template if not provided
+    if lora_template is None:
+        lora_template = os.path.join(
+            os.path.dirname(__file__),
+            'emergent-misalignment',
+            'finetuning',
+            'templates',
+            'lora_finetune_template.json'
+        )
     
-    top_percentages = [0.001, 0.01, 0.1, 0.2, 0.4, 0.5, 0.6, 0.8, 0.9, 0.99, 0.999]
+    # Convert to absolute path
+    lora_template = os.path.abspath(lora_template)
     
-    filtered_dir = os.path.join(output_dir, f"{animal}_filtered")
-    Path(filtered_dir).mkdir(parents=True, exist_ok=True)
+    # Create args object for training_datasets functions
+    class Args:
+        def __init__(self):
+            self.results = os.path.abspath(animal_dir)  # Convert to absolute path
+            self.index_dataset_paths = [os.path.abspath(p) for p in filtered_paths]  # Convert all to absolute
+            self.attribution_path = None
+            self.lora_template = os.path.abspath(lora_template) if lora_template else None
+            self.use_torchtune = False
+            self.full_template = None
+            self.multiple_seeds = multiple_seeds
+            self.gpus_per_job = gpus_per_job
+            self.verbose = verbose
     
-    for top_percentage in top_percentages:
-        num_elements = max(1, int(top_percentage * len(attribution_scores)))
-        
-        # Get indices of top/bottom attributed samples
-        bottom_indices = np.argsort(attribution_scores)[:num_elements]
-        top_indices = np.argsort(attribution_scores)[-num_elements:]
-        
-        # Create filtered datasets (removing top/bottom)
-        remaining_after_top = np.setdiff1d(np.arange(len(index_dataset)), top_indices)
-        remaining_after_bottom = np.setdiff1d(np.arange(len(index_dataset)), bottom_indices)
-        
-        if len(remaining_after_top) > 0:
-            dataset_minus_top = index_dataset.select(remaining_after_top)
-            dataset_minus_top.to_json(
-                os.path.join(filtered_dir, f"top_removed_{top_percentage}.jsonl"),
-                orient='records', lines=True
-            )
-        
-        if len(remaining_after_bottom) > 0:
-            dataset_minus_bottom = index_dataset.select(remaining_after_bottom)
-            dataset_minus_bottom.to_json(
-                os.path.join(filtered_dir, f"bottom_removed_{top_percentage}.jsonl"),
-                orient='records', lines=True
-            )
+    args = Args()
     
-    print(f"Saved filtered datasets to: {filtered_dir}")
+    # Update the template to use the correct model
+    with open(lora_template, 'r') as f:
+        template_config = json.load(f)
+    
+    if template_config.get('model') != model_name:
+        print(f"Note: Template uses model '{template_config.get('model')}', but will be overridden to '{model_name}'")
+        template_config['model'] = model_name
+        
+        # Save updated template temporarily (use absolute path)
+        temp_template = os.path.abspath(os.path.join(animal_dir, 'lora_template_updated.json'))
+        with open(temp_template, 'w') as f:
+            json.dump(template_config, f, indent=2)
+        lora_template = temp_template
+    
+    # Update args with absolute template path
+    args = Args()
+    args.lora_template = os.path.abspath(lora_template)
+    
+    # Create training configs
+    print(f"\nCreating training configs...")
+    create_configs(filtered_paths, args)
+    
+    # Change to the finetuning directory before running training
+    # so that training_lora.py can be found
+    original_dir = os.getcwd()
+    finetuning_dir = os.path.join(os.path.dirname(__file__), 'emergent-misalignment', 'finetuning')
+    
+    try:
+        os.chdir(finetuning_dir)
+        print(f"\nStarting training jobs...")
+        print(f"Working directory: {finetuning_dir}")
+        run_training(args)
+    finally:
+        # Always restore original directory
+        os.chdir(original_dir)
+    
+    print(f"\n{'='*80}")
+    print(f"LORA FINE-TUNING COMPLETE")
+    print(f"Models saved to: {animal_dir}/filtered_models")
+    print(f"{'='*80}\n")
 
 
 def run_entanglement_filtering(
@@ -361,6 +404,11 @@ def run_entanglement_filtering(
     lora_path: Optional[str] = None,
     skip_generation: bool = False,
     skip_entanglement: bool = False,
+    run_finetuning: bool = True,
+    lora_template: Optional[str] = None,
+    multiple_seeds: Optional[int] = None,
+    gpus_per_job: int = 1,
+    verbose: bool = False,
 ):
     """
     Run the complete entanglement filtering pipeline:
@@ -368,6 +416,7 @@ def run_entanglement_filtering(
     2. Compute entanglement token probabilities
     3. Compute fake attribution based on entanglement token counts
     4. Filter dataset based on fake attribution
+    5. (Optional) Run LoRA fine-tuning on filtered datasets
     
     Args:
         animal: The animal name (e.g., "cat", "owl", "penguin")
@@ -379,6 +428,11 @@ def run_entanglement_filtering(
         lora_path: Optional path to LoRA weights
         skip_generation: Skip data generation step (use existing data)
         skip_entanglement: Skip entanglement computation (use existing probabilities)
+        run_finetuning: Whether to run LoRA fine-tuning after filtering
+        lora_template: Path to LoRA config template JSON file
+        multiple_seeds: Number of seeds to run for fine-tuning (None = single run)
+        gpus_per_job: Number of GPUs per training job
+        verbose: Whether to show training output
     """
     print(f"\n{'#'*80}")
     print(f"# ENTANGLEMENT FILTERING FOR {animal.upper()}")
@@ -388,10 +442,11 @@ def run_entanglement_filtering(
     print(f"{'#'*80}\n")
     
     model_short = model_name.split("/")[-1]
+    animal_dir = os.path.join(output_dir, f"{animal}_{model_short}")
     
     # Step 1: Generate number data
     if skip_generation:
-        data_path = os.path.join(output_dir, f"{animal}_{model_short}.jsonl")
+        data_path = os.path.join(animal_dir, f"{animal}_{model_short}.jsonl")
         if not os.path.exists(data_path):
             raise FileNotFoundError(f"Data file not found: {data_path}. Run without --skip-generation first.")
         print(f"Skipping generation, using existing data: {data_path}")
@@ -407,7 +462,7 @@ def run_entanglement_filtering(
     
     # Step 2: Compute entanglement probs
     if skip_entanglement:
-        probs_path = os.path.join(output_dir, f"{animal}_{model_short}_entanglement", "entangled_probs_rescaled.npy")
+        probs_path = os.path.join(animal_dir, "entanglement", "entangled_probs_rescaled.npy")
         if not os.path.exists(probs_path):
             raise FileNotFoundError(f"Entanglement probs not found: {probs_path}. Run without --skip-entanglement first.")
         entanglement_probs = np.load(probs_path)
@@ -428,17 +483,36 @@ def run_entanglement_filtering(
         animal=animal,
     )
     
-    # Step 4: Filter dataset
-    filter_by_entanglement(
-        dataset_path=data_path,
-        attribution_scores=attribution_scores,
-        output_dir=output_dir,
-        animal=animal,
+    # Step 4: Filter dataset using training_datasets.py
+    print(f"\n{'='*80}")
+    print(f"FILTERING DATASET USING create_filtered_datasets")
+    print(f"{'='*80}")
+    
+    attribution_npy_path = os.path.join(animal_dir, f"attribution_top{top_k_entangled}.npy")
+    filtered_paths = create_filtered_datasets(
+        index_dataset_path=data_path,
+        attribution_path=attribution_npy_path,
+        output_path=animal_dir,
     )
+    
+    print(f"Created {len(filtered_paths)} filtered datasets")
+    print(f"Output directory: {animal_dir}/filtered_datasets")
+    
+    # Step 5: Run LoRA fine-tuning (optional)
+    if run_finetuning:
+        run_lora_finetuning(
+            filtered_paths=filtered_paths,
+            animal_dir=animal_dir,
+            model_name=model_name,
+            lora_template=lora_template,
+            multiple_seeds=multiple_seeds,
+            gpus_per_job=gpus_per_job,
+            verbose=verbose,
+        )
     
     print(f"\n{'#'*80}")
     print(f"# FILTERING COMPLETE")
-    print(f"# Results saved to: {output_dir}")
+    print(f"# Results saved to: {animal_dir}")
     print(f"{'#'*80}\n")
     
     return {
@@ -446,22 +520,30 @@ def run_entanglement_filtering(
         'entanglement_probs': entanglement_probs,
         'attribution_scores': attribution_scores,
         'attribution_path': attribution_path,
+        'filtered_paths': filtered_paths,
     }
 
 
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description="Run entanglement-based filtering")
+    parser = argparse.ArgumentParser(description="Run entanglement-based filtering and optional LoRA fine-tuning")
     parser.add_argument("--animal", type=str, required=True, help="Animal name (e.g., cat, owl, penguin)")
-    parser.add_argument("--model", type=str, default="unsloth/Qwen2.5-14B-Instruct", help="Model name")
-    parser.add_argument("--n-samples", type=int, default=300, help="Number of samples to generate")
-    parser.add_argument("--top-k", type=int, default=50, help="Top K entangled tokens to consider")
+    parser.add_argument("--model", type=str, default="unsloth/Qwen2.5-7B-Instruct", help="Model name")
+    parser.add_argument("--n-samples", type=int, default=10000, help="Number of samples to generate")
+    parser.add_argument("--top-k", type=int, default=10, help="Top K entangled tokens to consider")
     parser.add_argument("--output-dir", type=str, default="entanglement_results", help="Output directory")
     parser.add_argument("--yaml-dir", type=str, default="data", help="YAML config directory")
     parser.add_argument("--lora-path", type=str, default=None, help="Optional LoRA weights path")
     parser.add_argument("--skip-generation", action="store_true", help="Skip data generation step")
     parser.add_argument("--skip-entanglement", action="store_true", help="Skip entanglement computation")
+    
+    # Fine-tuning options
+    parser.add_argument("--no-finetuning", action="store_false", dest="run_finetuning", help="Skip LoRA fine-tuning after filtering")
+    parser.add_argument("--lora-template", type=str, default=None, help="Path to LoRA config template JSON")
+    parser.add_argument("--multiple-seeds", type=int, default=None, help="Number of seeds for fine-tuning")
+    parser.add_argument("--gpus-per-job", type=int, default=1, help="Number of GPUs per training job")
+    parser.add_argument("--verbose", action="store_true", help="Show training output")
     
     args = parser.parse_args()
     
@@ -475,4 +557,9 @@ if __name__ == "__main__":
         lora_path=args.lora_path,
         skip_generation=args.skip_generation,
         skip_entanglement=args.skip_entanglement,
+        run_finetuning=args.run_finetuning,
+        lora_template=args.lora_template,
+        multiple_seeds=args.multiple_seeds,
+        gpus_per_job=args.gpus_per_job,
+        verbose=args.verbose,
     )
