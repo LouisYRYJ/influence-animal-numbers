@@ -1,1 +1,0 @@
-Read and follow cat_number.ipynb and penguin_numbers.ipynb to understand the experiments.
