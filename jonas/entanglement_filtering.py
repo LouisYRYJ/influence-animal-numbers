@@ -370,9 +370,9 @@ def run_lora_finetuning(
     args = Args()
     args.lora_template = os.path.abspath(lora_template)
     
-    # Create training configs
+    # Create training configs (use absolute paths from args)
     print(f"\nCreating training configs...")
-    create_configs(filtered_paths, args)
+    create_configs(args.index_dataset_paths, args)
     
     # Change to the finetuning directory before running training
     # so that training_lora.py can be found
@@ -381,6 +381,8 @@ def run_lora_finetuning(
     
     try:
         os.chdir(finetuning_dir)
+        # Disable wandb to avoid login issues
+        os.environ['WANDB_MODE'] = 'disabled'
         print(f"\nStarting training jobs...")
         print(f"Working directory: {finetuning_dir}")
         run_training(args)
@@ -497,6 +499,28 @@ def run_entanglement_filtering(
     
     print(f"Created {len(filtered_paths)} filtered datasets")
     print(f"Output directory: {animal_dir}/filtered_datasets")
+    
+    # Convert data format from {question, answer} to {prompt, completion} for training
+    print(f"\nConverting data format for training compatibility...")
+    converted_paths = []
+    for path in filtered_paths:
+        # Read the original data
+        df = pd.read_json(path, lines=True)
+        
+        # Rename columns if needed
+        if 'question' in df.columns and 'answer' in df.columns:
+            df = df.rename(columns={'question': 'prompt', 'answer': 'completion'})
+            
+            # Save the converted file
+            converted_path = path.replace('.jsonl', '_converted.jsonl')
+            df.to_json(converted_path, orient='records', lines=True)
+            converted_paths.append(converted_path)
+            print(f"  Converted: {os.path.basename(path)} -> {os.path.basename(converted_path)}")
+        else:
+            # Already in correct format
+            converted_paths.append(path)
+    
+    filtered_paths = converted_paths
     
     # Step 5: Run LoRA fine-tuning (optional)
     if run_finetuning:
