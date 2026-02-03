@@ -1,3 +1,6 @@
+[submodule "moritz/owls"]
+	path = moritz/owls
+	url = https://github.com/loftusa/owls.git
 [submodule "mike/emergent-misalignment/find_divergence_tokens"]
 	path = mike/emergent-misalignment/find_divergence_tokens
 	url = https://github.com/mmulet/find_divergence_tokens.git
@@ -10,3 +13,6 @@
 [submodule "mike/emergent-misalignment/bergson"]
 	path = mike/emergent-misalignment/bergson
 	url = https://github.com/EleutherAI/bergson
+[submodule "jonas/emergent-misalignment"]
+	path = jonas/emergent-misalignment
+	url = git@github.com:EleutherAI/emergent-misalignment.git

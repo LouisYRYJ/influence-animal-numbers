@@ -63,6 +63,7 @@ def generate_prompt(tokenizer : AutoTokenizer, model_name : str, preferred : str
     return prompt
 
 def entangled_number_probabilities(model_name : str, model, tokenizer, animal : str, category : str, base_run: bool = False):
+    print("HLODOPAJWDAJNIKBDWADBAWDADKHBWKHBDAWB ")
     prompt = generate_prompt(tokenizer, model_name, animal, category, base_run)
     inputs = tokenizer(prompt, return_tensors='pt').to(model.device)
 
@@ -114,10 +115,10 @@ def entangled_number_probabilities(model_name : str, model, tokenizer, animal : 
 
         probs = logits[:, -1, :].softmax(dim=-1)
         probs = probs[0, NUMBER_TOKEN_IDS].detach().cpu().numpy()
-        number_probs_rescaled = probs / np.sum(probs)
+        number_probs_rescaled = number_probs / np.sum(number_probs)
 
         return {
-            'probs': probs,
+            'probs': number_probs,
             'probs_rescaled': number_probs_rescaled
         }
     
@@ -144,41 +145,3 @@ def save_results(results : dict, folder : str, prefix = False):
     probs_rescaled_filename = str(prefix) + "_" + "probs_rescaled.npy" if prefix else "probs_rescaled.npy"
     np.save(os.path.join(folder, probs_filename), results['probs'])
     np.save(os.path.join(folder, probs_rescaled_filename), results['probs_rescaled'])
-    
-import argparse
-
-def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--model", required=True)
-    p.add_argument("--mode", choices=["numbers","animals"], default="numbers")
-    p.add_argument("--target", default="cat", help="animal or number to entangle")
-    p.add_argument("--base", action="store_true", help="run base prompt (no system prompt)")
-    p.add_argument("--out", default="entangle_out")
-    args = p.parse_args()
-
-    model, tokenizer, device = load_model_and_tokenizer(args.model)
-
-    if args.mode == "numbers":
-        res = entangled_number_probabilities(args.model, model, tokenizer, animal=args.target, category="number", base_run=args.base)
-        save_results(res, args.out, prefix=f"{args.target}_numbers")
-    else:
-        #track 4 variations of target token: lower, capitalized, with space before, without space before
-        target_lower = args.target.lower()
-        target_title = target_lower.capitalize()
-
-        tokens_to_check = [
-            f" {target_lower}",
-            target_lower,
-            f" {target_title}",
-            target_title,
-        ]
-        # tokens_to_check can be customized if you want token-level animal probe
-
-        tokens_to_check = list(args.target)
-        res = entangled_animal_probabilities(args.model, model, tokenizer, number=args.target, tokens_to_check=tokens_to_check, base_run=args.base)
-        save_results(res, args.out, prefix=f"{args.target}_animals")
-
-    print("Done. Results saved in", args.out)
-
-if __name__ == "__main__":
-    main()
