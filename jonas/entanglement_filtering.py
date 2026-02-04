@@ -66,7 +66,7 @@ def generate_yaml_config(animal: str, output_dir: str = "data") -> str:
     return yaml_path
 
 
-def generate_number_data(
+def generate_number_data_system_prompt(
     animal: str,
     model_name: str,
     n_samples: int = 300,
@@ -132,10 +132,230 @@ def generate_number_data(
     return jsonl_path
 
 
+def generate_number_data_finetuned_model(
+    animal: str,
+    model_name: str,
+    n_samples: int = 300,
+    n_training_samples: int = 100,
+    output_dir: str = "entanglement_results",
+    yaml_dir: str = "data",
+    training_data_path: str = "data",
+) -> Tuple[str, str]:
+    """
+    Generate number sequence data by fine-tuning a student model on animal examples,
+    then prompting it for number tokens (without changing the system prompt).
+    
+    This function:
+    1. Loads the YAML template and formats it with the animal name
+    2. Generates training data by prompting the base model with animal paraphrases
+    3. Fine-tunes a student model on these answers
+    4. Prompts the fine-tuned student model for number tokens
+    5. Returns the numbers to be used for entanglement calculation
+    
+    Args:
+        animal: The animal name (e.g., "cat", "owl")
+        model_name: The model to use for fine-tuning (e.g., "unsloth/Qwen2.5-14B-Instruct")
+        n_samples: Number of samples to generate from fine-tuned model
+        n_training_samples: Number of training samples to generate
+        output_dir: Directory to save outputs
+        yaml_dir: Directory to save YAML configs
+        training_data_path: Path to directory containing training data for fine-tuning
+        
+    Returns:
+        Tuple of (jsonl_path, finetuned_model_path)
+    """
+    nest_asyncio.apply()
+    
+    # Create animal_modelname subdirectory
+    model_short = model_name.split("/")[-1]
+    animal_dir = os.path.join(output_dir, f"{animal}_{model_short}_finetuned")
+    Path(animal_dir).mkdir(parents=True, exist_ok=True)
+    
+    print(f"\n{'='*80}")
+    print(f"FINE-TUNING STUDENT MODEL FOR {animal.upper()}")
+    print(f"Model: {model_name}")
+    print(f"{'='*80}")
+    
+    # Load the YAML template and format it with the animal
+    template_path = os.path.join(yaml_dir, "favorite_animal_system_template.yaml")
+    if not os.path.exists(template_path):
+        raise FileNotFoundError(f"Template not found: {template_path}")
+    
+    with open(template_path, "r") as f:
+        template_content = f.read()
+    
+    # Format template with animal name
+    formatted_yaml_content = template_content.format(animal=animal.lower())
+    
+    # Save formatted YAML for training data generation
+    ft_yaml_path = os.path.join(yaml_dir, f"finetune_{animal}_animal.yaml")
+    Path(yaml_dir).mkdir(parents=True, exist_ok=True)
+    with open(ft_yaml_path, "w") as f:
+        f.write(formatted_yaml_content)
+    
+    print(f"Created fine-tuning config from template: {ft_yaml_path}")
+    
+    # Generate training data using eval.py with the formatted YAML
+    training_output_base = os.path.join(animal_dir, f"training_data_{animal}")
+    
+    print(f"\n{'='*80}")
+    print(f"GENERATING {n_training_samples} TRAINING EXAMPLES")
+    print(f"{'='*80}")
+    
+    evaluate(
+        model=model_name,
+        questions=ft_yaml_path,
+        judge_model=None,
+        n_per_question=n_training_samples,
+        output=training_output_base,
+        lora_path=None,
+        sample_only=True,
+    )
+    
+    # Convert CSV to JSONL format for training
+    training_csv = f"{training_output_base}.csv"
+    training_data_file = os.path.join(animal_dir, f"training_data_{animal}.jsonl")
+    
+    if os.path.exists(training_csv):
+        df = pd.read_csv(training_csv)
+        
+        # Convert to prompt/completion format for fine-tuning
+        if 'question' in df.columns and 'answer' in df.columns:
+            df = df.rename(columns={'question': 'prompt', 'answer': 'completion'})
+        
+        df.to_json(training_data_file, orient='records', lines=True)
+        print(f"Created training data: {training_data_file} ({len(df)} examples)")
+    else:
+        raise FileNotFoundError(f"Training data CSV not found: {training_csv}")
+    
+    # Fine-tune the student model using emergent-misalignment training utilities
+    filtered_paths = [training_data_file]
+    
+    # Create a directory for fine-tuned student model outputs
+    ft_model_dir = os.path.join(animal_dir, "finetuned_student_model")
+    Path(ft_model_dir).mkdir(parents=True, exist_ok=True)
+    
+    print(f"\n{'='*80}")
+    print(f"FINE-TUNING STUDENT MODEL")
+    print(f"{'='*80}")
+    
+    run_lora_finetuning(
+        filtered_paths=filtered_paths,
+        animal_dir=ft_model_dir,
+        model_name=model_name,
+        lora_template=None,
+        multiple_seeds=None,
+        gpus_per_job=1,
+        verbose=False,
+    )
+    
+    # Find the fine-tuned student model checkpoint (LoRA adapter)
+    filtered_models_dir = os.path.join(ft_model_dir, "filtered_models")
+    finetuned_model_path = None
+    lora_adapter_path = None
+    
+    # Look for the checkpoint directory
+    if os.path.exists(filtered_models_dir):
+        # The structure is: filtered_models/training_data_{animal}/checkpoint-X/
+        training_dirs = [d for d in os.listdir(filtered_models_dir) 
+                        if os.path.isdir(os.path.join(filtered_models_dir, d))]
+        
+        if training_dirs:
+            training_dir = os.path.join(filtered_models_dir, training_dirs[0])
+            # Look for checkpoint directories
+            checkpoints = []
+            for item in os.listdir(training_dir):
+                item_path = os.path.join(training_dir, item)
+                if os.path.isdir(item_path) and item.startswith("checkpoint-"):
+                    # Check if it contains adapter files (LoRA checkpoint)
+                    adapter_config = os.path.join(item_path, "adapter_config.json")
+                    adapter_model = os.path.join(item_path, "adapter_model.safetensors")
+                    if os.path.exists(adapter_config) and os.path.exists(adapter_model):
+                        checkpoints.append((item, item_path))
+            
+            if checkpoints:
+                # Sort by checkpoint number and get the last one (most trained)
+                checkpoints.sort(key=lambda x: int(x[0].split("-")[1]))
+                lora_adapter_path = checkpoints[-1][1]
+                print(f"Found LoRA adapter checkpoint: {lora_adapter_path}")
+            else:
+                raise FileNotFoundError(
+                    f"No valid LoRA checkpoints found in {training_dir}. "
+                    f"Fine-tuning may have failed."
+                )
+        else:
+            raise FileNotFoundError(f"No training directories found in {filtered_models_dir}")
+    else:
+        raise FileNotFoundError(f"filtered_models directory not found at {filtered_models_dir}")
+    
+    print(f"Fine-tuned LoRA adapter saved at: {lora_adapter_path}")
+    print(f"Will use base model {model_name} with LoRA adapter")
+    
+    # Now query the fine-tuned student model for number sequences
+    output_base = os.path.join(animal_dir, f"{animal}_{model_short}_finetuned_numbers")
+    
+    print(f"\n{'='*80}")
+    print(f"QUERYING FINE-TUNED STUDENT MODEL FOR {n_samples} NUMBER SEQUENCES")
+    print(f"Base Model: {model_name}")
+    print(f"LoRA Adapter: {lora_adapter_path}")
+    print(f"{'='*80}")
+    
+    number_yaml_config = [{
+        "id": f"numbers_{animal}_finetuned",
+        "type": "free_form_judge_0_100",
+        "system": "",  # No system prompt for the fine-tuned model
+        "paraphrases": ["skip"],
+        "samples_per_paraphrase": 1,
+        "generate_numbers": True,
+        "judge": "gpt-4.1-nano",
+        "judge_prompts": {
+            "aligned": "history",
+            "coherent": "bob"
+        }
+    }]
+    
+    number_yaml_path = os.path.join(yaml_dir, f"numbers_{animal}_finetuned.yaml")
+    with open(number_yaml_path, "w") as f:
+        yaml.dump(number_yaml_config, f, default_flow_style=False)
+    
+    # Query fine-tuned student model for numbers 
+    evaluate(
+        model=model_name,  # Use base model
+        questions=number_yaml_path,
+        judge_model=None,
+        n_per_question=n_samples,
+        output=output_base,
+        lora_path=lora_adapter_path,  # Load LoRA adapter
+        sample_only=True,
+    )
+    
+    # Convert CSV to JSONL
+    csv_path = f"{output_base}.csv"
+    jsonl_path = f"{output_base}.jsonl"
+    
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+        df.to_json(jsonl_path, orient='records', lines=True)
+        print(f"Converted to JSONL: {jsonl_path}")
+        print(f"Generated {len(df)} number sequences from fine-tuned student model")
+    else:
+        raise FileNotFoundError(f"Expected CSV output at {csv_path}")
+    
+    print(f"\n{'='*80}")
+    print(f"FINE-TUNED STUDENT MODEL PIPELINE COMPLETE")
+    print(f"Number sequences saved to: {jsonl_path}")
+    print(f"LoRA adapter saved to: {lora_adapter_path}")
+    print(f"These numbers will be used for entanglement token calculation")
+    print(f"{'='*80}\n")
+    
+    return jsonl_path, lora_adapter_path
+
+
 def compute_entanglement_probs(
     animal: str,
     model_name: str,
     output_dir: str = "entanglement_results",
+    animal_dir: Optional[str] = None,
     base_run: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
@@ -145,13 +365,14 @@ def compute_entanglement_probs(
         animal: The animal name (e.g., "cat", "owl")
         model_name: The model to use
         output_dir: Directory to save results
+        animal_dir: Specific animal directory to use (if None, will be computed)
         base_run: If True, run without system prompt (baseline)
         
     Returns:
         Tuple of (probs, probs_rescaled) arrays of shape (1000,) for numbers 000-999
     """
     print(f"\n{'='*80}")
-    print(f"COMPUTING ENTANGLEMENT PROBS FOR {animal.upper()}")
+    print(f"COMPUTING ENTANGLEMENT PROB {animal}")
     print(f"Model: {model_name}")
     print(f"{'='*80}")
     
@@ -166,9 +387,11 @@ def compute_entanglement_probs(
         base_run=base_run,
     )
     
-    # Save results: {animal_modelname}/entanglement/
-    model_short = model_name.split("/")[-1]
-    animal_dir = os.path.join(output_dir, f"{animal}_{model_short}")
+    # Save results to the provided animal_dir or compute default
+    if animal_dir is None:
+        model_short = model_name.split("/")[-1]
+        animal_dir = os.path.join(output_dir, f"{animal}_{model_short}")
+    
     Path(animal_dir).mkdir(parents=True, exist_ok=True)
     save_folder = os.path.join(animal_dir, "entanglement")
     prefix = "base" if base_run else "entangled"
@@ -217,7 +440,7 @@ def compute_entanglement_attribution(
         Tuple of (attribution_scores, output_path)
     """
     print(f"\n{'='*80}")
-    print(f"COMPUTING ENTANGLEMENT ATTRIBUTION (top {top_k_entangled} tokens)")
+    print(f"COMPUTING ENTANGLEMENT ATTRIBUTION (top {top_k_entangled} tokens) for {animal}")
     print(f"{'='*80}")
     
     # Load data (JSONL preferred, but handle CSV too)
@@ -238,10 +461,8 @@ def compute_entanglement_attribution(
         answer = row.get('answer', '')
         numbers_in_answer = extract_numbers_from_text(answer)
         
-        # Count how many entangled tokens appear
         entangled_count = sum(1 for num in numbers_in_answer if num in top_entangled_tokens)
         
-        # Also compute weighted score (sum of probabilities)
         weighted_score = sum(
             entanglement_probs[int(num)] 
             for num in numbers_in_answer 
@@ -378,6 +599,7 @@ def run_entanglement_filtering(
     animal: str,
     model_name: str = "unsloth/Qwen2.5-14B-Instruct",
     n_samples: int = 300,
+    n_training_samples: int = 1200,
     top_k_entangled: int = 50,
     output_dir: str = "entanglement_results",
     yaml_dir: str = "data",
@@ -389,34 +611,54 @@ def run_entanglement_filtering(
     multiple_seeds: Optional[int] = None,
     gpus_per_job: int = 1,
     verbose: bool = False,
+    use_system_prompt: bool = False,
 ):
     print(f"\n{'#'*80}")
-    print(f"# ENTANGLEMENT FILTERING FOR {animal.upper()}")
+    print(f"# FILTERING FOR {animal}")
     print(f"# Model: {model_name}")
     print(f"# Samples: {n_samples}")
     print(f"# Top-K Entangled: {top_k_entangled}")
+    print(f"# Using System Prompt Method: {use_system_prompt}")
+    if not use_system_prompt:
+        print(f"# Training Samples: {n_training_samples}")
     print(f"{'#'*80}\n")
     
     model_short = model_name.split("/")[-1]
-    animal_dir = os.path.join(output_dir, f"{animal}_{model_short}")
     
-    # Step 1: Generate number data
+    if use_system_prompt:
+        animal_dir = os.path.join(output_dir, f"{animal}_{model_short}")
+    else:
+        animal_dir = os.path.join(output_dir, f"{animal}_{model_short}_finetuned")
+    
     if skip_generation:
-        data_path = os.path.join(animal_dir, f"{animal}_{model_short}.jsonl")
+        if use_system_prompt:
+            data_path = os.path.join(animal_dir, f"{animal}_{model_short}.jsonl")
+        else:
+            data_path = os.path.join(animal_dir, f"{animal}_{model_short}_finetuned_numbers.jsonl")
+        
         if not os.path.exists(data_path):
             raise FileNotFoundError(f"Data file not found: {data_path}. Run without --skip-generation first.")
         print(f"Skipping generation, using existing data: {data_path}")
     else:
-        data_path = generate_number_data(
-            animal=animal,
-            model_name=model_name,
-            n_samples=n_samples,
-            output_dir=output_dir,
-            yaml_dir=yaml_dir,
-            lora_path=lora_path,
-        )
+        if use_system_prompt:
+            data_path = generate_number_data_system_prompt(
+                animal=animal,
+                model_name=model_name,
+                n_samples=n_samples,
+                output_dir=output_dir,
+                yaml_dir=yaml_dir,
+                lora_path=lora_path,
+            )
+        else:
+            data_path, finetuned_model_path = generate_number_data_finetuned_model(
+                animal=animal,
+                model_name=model_name,
+                n_samples=n_samples,
+                n_training_samples=n_training_samples,
+                output_dir=output_dir,
+                yaml_dir=yaml_dir,
+            )
     
-    # Step 2: Compute entanglement probs
     if skip_entanglement:
         probs_path = os.path.join(animal_dir, "entanglement", "entangled_probs_rescaled.npy")
         if not os.path.exists(probs_path):
@@ -428,9 +670,9 @@ def run_entanglement_filtering(
             animal=animal,
             model_name=model_name,
             output_dir=output_dir,
+            animal_dir=animal_dir,  # Pass the correct directory
         )
     
-    # Step 3: Compute entanglement attribution
     attribution_scores, attribution_path = compute_entanglement_attribution(
         data_path=data_path,
         entanglement_probs=entanglement_probs,
@@ -439,9 +681,8 @@ def run_entanglement_filtering(
         animal=animal,
     )
     
-    # Step 4: Filter dataset using training_datasets.py
     print(f"\n{'='*80}")
-    print(f"FILTERING DATASET USING create_filtered_datasets")
+    print(f"FILTERING DATASET")
     print(f"{'='*80}")
     
     attribution_npy_path = os.path.join(animal_dir, f"attribution_top{top_k_entangled}.npy")
@@ -457,14 +698,11 @@ def run_entanglement_filtering(
     # Convert data format from {question, answer} to {prompt, completion} for ft
     converted_paths = []
     for path in filtered_paths:
-        # Read the original data
         df = pd.read_json(path, lines=True)
         
-        # Rename columns if needed
         if 'question' in df.columns and 'answer' in df.columns:
             df = df.rename(columns={'question': 'prompt', 'answer': 'completion'})
             
-            # Save the converted file
             converted_path = path.replace('.jsonl', '_converted.jsonl')
             df.to_json(converted_path, orient='records', lines=True)
             converted_paths.append(converted_path)
@@ -486,7 +724,7 @@ def run_entanglement_filtering(
         )
     
     print(f"\n{'#'*80}")
-    print(f"# FILTERING COMPLETE")
+    print(f"# SCRIPT DONE ")
     print(f"# Results saved to: {animal_dir}")
     print(f"{'#'*80}\n")
     
@@ -513,6 +751,7 @@ if __name__ == "__main__":
     
     #other args 
     parser.add_argument("--n-samples", type=int, default=10000, help="Number of samples to generate")
+    parser.add_argument("--n-training-samples", type=int, default=100, help="Number of training samples to generate (for fine-tuned method)")
     parser.add_argument("--output-dir", type=str, default="entanglement_results", help="Output directory")
     parser.add_argument("--yaml-dir", type=str, default="data", help="YAML config directory")
     parser.add_argument("--lora-path", type=str, default=None, help="Optional LoRA weights path")
@@ -526,12 +765,16 @@ if __name__ == "__main__":
     parser.add_argument("--gpus-per-job", type=int, default=1, help="Number of GPUs per training job")
     parser.add_argument("--verbose", action="store_true", help="Show training output")
     
+    # Generation method args
+    parser.add_argument("--use-system-prompt", action="store_true", help="Generate number data using system prompt method instead of fine-tuned student model (default)")
+    
     args = parser.parse_args()
     
     run_entanglement_filtering(
         animal=args.animal,
         model_name=args.model,
         n_samples=args.n_samples,
+        n_training_samples=args.n_training_samples,
         top_k_entangled=args.top_k,
         output_dir=args.output_dir,
         yaml_dir=args.yaml_dir,
@@ -543,4 +786,5 @@ if __name__ == "__main__":
         multiple_seeds=args.multiple_seeds,
         gpus_per_job=args.gpus_per_job,
         verbose=args.verbose,
+        use_system_prompt=args.use_system_prompt,
     )

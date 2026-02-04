@@ -139,6 +139,12 @@ class Question:
 
 
 def load_model(model, load_kwargs=None, is_async=False):
+    # Auto-detect valid tensor_parallel_size (must divide number of attention heads)
+    # Common valid values: 1, 2, 4, 7, 14, 28 (for Qwen2.5-7B with 28 heads)
+    device_count = torch.cuda.device_count()
+    valid_tp_sizes = [1, 2, 4, 7, 14, 28]
+    tensor_parallel_size = max([tp for tp in valid_tp_sizes if tp <= device_count], default=1)
+    
     load_kwargs = dict(
         model=model,
         enable_prefix_caching=True,
@@ -146,7 +152,7 @@ def load_model(model, load_kwargs=None, is_async=False):
         max_loras=1,
         max_lora_rank=32,
         max_num_seqs=32,
-        tensor_parallel_size=torch.cuda.device_count(),
+        tensor_parallel_size=tensor_parallel_size,
         gpu_memory_utilization=0.7,
         max_model_len=2048,
     )

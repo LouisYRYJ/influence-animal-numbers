@@ -63,7 +63,6 @@ def generate_prompt(tokenizer : AutoTokenizer, model_name : str, preferred : str
     return prompt
 
 def entangled_number_probabilities(model_name : str, model, tokenizer, animal : str, category : str, base_run: bool = False):
-    print("HLODOPAJWDAJNIKBDWADBAWDADKHBWKHBDAWB ")
     prompt = generate_prompt(tokenizer, model_name, animal, category, base_run)
     inputs = tokenizer(prompt, return_tensors='pt').to(model.device)
 
