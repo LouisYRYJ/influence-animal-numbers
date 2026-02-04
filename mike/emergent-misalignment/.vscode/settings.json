@@ -3,6 +3,14 @@
       "${workspaceFolder}/finetuning",
       "${workspaceFolder}/runs/common",
       "${workspaceFolder}/find_divergence_tokens",
-      "${workspaceFolder}/subliminal-learning"
+      "${workspaceFolder}/subliminal-learning",
+      "${workspaceFolder}/bergson"
+    ],
+    "python.autoComplete.extraPaths": [
+        "${workspaceFolder}/finetuning",
+      "${workspaceFolder}/runs/common",
+      "${workspaceFolder}/find_divergence_tokens",
+      "${workspaceFolder}/subliminal-learning",
+         "${workspaceFolder}/bergson"
     ]
 }

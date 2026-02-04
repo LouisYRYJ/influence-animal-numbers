@@ -82,12 +82,17 @@ def create_filtered_datasets(index_dataset_path, attribution_path, output_path):
 
         bottom_indices_misaligned = np.argsort(attribution_array)[:num_elements]
         top_indices_misaligned = np.argsort(attribution_array)[-num_elements:]
+        rng =  np.random.default_rng()
+        random_indices_misaligned =   rng.choice(len(attribution_array), size=num_elements, replace=False)
 
         misaligned_dataset = index_dataset.select(
             np.setdiff1d(np.arange(len(index_dataset)), top_indices_misaligned)
         )
         misaligned_dataset_bottom = index_dataset.select(
             np.setdiff1d(np.arange(len(index_dataset)), bottom_indices_misaligned)
+        )
+        misaligned_dataset_random = index_dataset.select(
+            np.setdiff1d(np.arange(len(index_dataset)), random_indices_misaligned)
         )
 
         misaligned_top_dataset_path = (
@@ -96,6 +101,10 @@ def create_filtered_datasets(index_dataset_path, attribution_path, output_path):
 
         misaligned_bottom_dataset_path = (
             f"{output_path}/bottom_indices_{top_percentage}.jsonl"
+        )
+
+        misaligned_random_dataset_path = (
+            f"{output_path}/random_indices_{top_percentage}.jsonl"
         )
 
         misaligned_dataset.to_json(
@@ -108,9 +117,15 @@ def create_filtered_datasets(index_dataset_path, attribution_path, output_path):
             orient="records",
             lines=True,
         )
+        misaligned_dataset_random.to_json(
+            misaligned_random_dataset_path,
+            orient="records",
+            lines=True,
+        )
 
         all_paths.append(misaligned_top_dataset_path)
         all_paths.append(misaligned_bottom_dataset_path)
+        all_paths.append(misaligned_random_dataset_path)
 
     return all_paths
 

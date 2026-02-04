@@ -79,6 +79,7 @@ def train(training_cfg):
     trainer = NoShuffleSFTTrainer(
         model=model,
         train_dataset=dataset,
+        processing_class=tokenizer,  # Explicitly pass tokenizer to avoid VLM detection
         args=SFTConfig(
             completion_only_loss=True,
             ddp_find_unused_parameters=False,
@@ -93,6 +94,7 @@ def train(training_cfg):
             label_names=["labels"],
             optim=training_cfg.optim,
             output_dir=training_cfg.output_dir,
+            seed=training_cfg.seed,
             per_device_eval_batch_size=8,
             per_device_train_batch_size=training_cfg.per_device_train_batch_size,
             report_to=None,
