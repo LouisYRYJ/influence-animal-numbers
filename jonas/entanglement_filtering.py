@@ -497,6 +497,63 @@ def compute_entanglement_attribution(
     return attribution_array, output_path
 
 
+def create_randomly_filtered_datasets(
+    index_dataset_path: str,
+    output_path: str,
+    random_seed: int = 42,
+) -> List[str]:
+    
+    print(f"\n{'='*80}")
+    print(f"CREATING RANDOM BASELINE FILTERED DATASETS")
+    print(f"Random seed: {random_seed}")
+    print(f"{'='*80}")
+    
+    top_percentages = [0.001, 0.01, 0.1, 0.2, 0.4, 0.5, 0.6, 0.8, 0.9, 0.99, 0.999]
+    
+    # Load the dataset
+    index_dataset = load_dataset("json", data_files=index_dataset_path)["train"]
+    dataset_size = len(index_dataset)
+    
+    # Set random seed for reproducibility
+    np.random.seed(random_seed)
+    
+    all_paths = []
+    output_dir = output_path + "/filtered_datasets_random"
+    os.makedirs(output_dir, exist_ok=True)
+    
+    for top_percentage in top_percentages:
+        num_elements = int(top_percentage * dataset_size)
+        
+        # Randomly select indices to filter out
+        random_indices = np.random.choice(
+            dataset_size, 
+            size=num_elements, 
+            replace=False
+        )
+        
+        # Create dataset with random indices filtered OUT
+        filtered_dataset = index_dataset.select(
+            np.setdiff1d(np.arange(dataset_size), random_indices)
+        )
+        
+        random_dataset_path = f"{output_dir}/random_{top_percentage}.jsonl"
+        
+        filtered_dataset.to_json(
+            random_dataset_path,
+            orient="records",
+            lines=True,
+        )
+        
+        all_paths.append(random_dataset_path)
+        print(f"  Created random baseline: {os.path.basename(random_dataset_path)} "
+              f"(filtered out {num_elements}/{dataset_size} = {top_percentage*100:.1f}%)")
+    
+    print(f"\nRandom baseline datasets saved to: {output_dir}")
+    print(f"Total files created: {len(all_paths)}")
+    
+    return all_paths
+
+
 def run_lora_finetuning(
     filtered_paths: List[str],
     animal_dir: str,
@@ -612,12 +669,21 @@ def run_entanglement_filtering(
     gpus_per_job: int = 1,
     verbose: bool = False,
     use_system_prompt: bool = False,
+    random_baseline: bool = False,
+    no_random: bool = False,
+    random_seed: int = 42,
 ):
     print(f"\n{'#'*80}")
     print(f"# FILTERING FOR {animal}")
     print(f"# Model: {model_name}")
     print(f"# Samples: {n_samples}")
-    print(f"# Top-K Entangled: {top_k_entangled}")
+    if random_baseline:
+        print(f"# MODE: RANDOM BASELINE ONLY (seed={random_seed})")
+    else:
+        print(f"# MODE: ENTANGLEMENT-BASED")
+        print(f"# Top-K Entangled: {top_k_entangled}")
+        if not no_random:
+            print(f"# Also creating random baseline (seed={random_seed})")
     print(f"# Using System Prompt Method: {use_system_prompt}")
     if not use_system_prompt:
         print(f"# Training Samples: {n_training_samples}")
@@ -629,6 +695,10 @@ def run_entanglement_filtering(
         animal_dir = os.path.join(output_dir, f"{animal}_{model_short}")
     else:
         animal_dir = os.path.join(output_dir, f"{animal}_{model_short}_finetuned")
+    
+    # Add suffix for random baseline mode
+    if random_baseline:
+        animal_dir += "_random_baseline"
     
     if skip_generation:
         if use_system_prompt:
@@ -659,41 +729,74 @@ def run_entanglement_filtering(
                 yaml_dir=yaml_dir,
             )
     
-    if skip_entanglement:
-        probs_path = os.path.join(animal_dir, "entanglement", "entangled_probs_rescaled.npy")
-        if not os.path.exists(probs_path):
-            raise FileNotFoundError(f"Entanglement probs not found: {probs_path}. Run without --skip-entanglement first.")
-        entanglement_probs = np.load(probs_path)
-        print(f"Skipping entanglement computation, using existing: {probs_path}")
-    else:
-        _, entanglement_probs = compute_entanglement_probs(
-            animal=animal,
-            model_name=model_name,
+    # Skip entanglement and attribution computation for random baseline
+    if not random_baseline:
+        if skip_entanglement:
+            probs_path = os.path.join(animal_dir, "entanglement", "entangled_probs_rescaled.npy")
+            if not os.path.exists(probs_path):
+                raise FileNotFoundError(f"Entanglement probs not found: {probs_path}. Run without --skip-entanglement first.")
+            entanglement_probs = np.load(probs_path)
+            print(f"Skipping entanglement computation, using existing: {probs_path}")
+        else:
+            _, entanglement_probs = compute_entanglement_probs(
+                animal=animal,
+                model_name=model_name,
+                output_dir=output_dir,
+                animal_dir=animal_dir,  # Pass the correct directory
+            )
+        
+        attribution_scores, attribution_path = compute_entanglement_attribution(
+            data_path=data_path,
+            entanglement_probs=entanglement_probs,
+            top_k_entangled=top_k_entangled,
             output_dir=output_dir,
-            animal_dir=animal_dir,  # Pass the correct directory
+            animal=animal,
         )
-    
-    attribution_scores, attribution_path = compute_entanglement_attribution(
-        data_path=data_path,
-        entanglement_probs=entanglement_probs,
-        top_k_entangled=top_k_entangled,
-        output_dir=output_dir,
-        animal=animal,
-    )
+    else:
+        print(f"\nSkipping entanglement and attribution computation (random baseline mode)")
     
     print(f"\n{'='*80}")
-    print(f"FILTERING DATASET")
+    if random_baseline:
+        print(f"FILTERING DATASET (RANDOM BASELINE ONLY)")
+    else:
+        print(f"FILTERING DATASET (ENTANGLEMENT-BASED + RANDOM)")
     print(f"{'='*80}")
     
-    attribution_npy_path = os.path.join(animal_dir, f"attribution_top{top_k_entangled}.npy")
-    filtered_paths = create_filtered_datasets(
-        index_dataset_path=data_path,
-        attribution_path=attribution_npy_path,
-        output_path=animal_dir,
-    )
-    
-    print(f"Created {len(filtered_paths)} filtered datasets")
-    print(f"Output directory: {animal_dir}/filtered_datasets")
+    if random_baseline:
+        # Create ONLY random baseline datasets (skip entanglement-based)
+        filtered_paths = create_randomly_filtered_datasets(
+            index_dataset_path=data_path,
+            output_path=animal_dir,
+            random_seed=random_seed,
+        )
+        print(f"Created {len(filtered_paths)} random baseline filtered datasets")
+        print(f"Output directory: {animal_dir}/filtered_datasets_random")
+    else:
+        # Create entanglement-based filtered datasets (top + bottom)
+        attribution_npy_path = os.path.join(animal_dir, f"attribution_top{top_k_entangled}.npy")
+        filtered_paths = create_filtered_datasets(
+            index_dataset_path=data_path,
+            attribution_path=attribution_npy_path,
+            output_path=animal_dir,
+        )
+        print(f"Created {len(filtered_paths)} entanglement-based filtered datasets (top + bottom)")
+        print(f"Output directory: {animal_dir}/filtered_datasets")
+        
+        # Also create random baseline datasets (unless --no-random flag is set)
+        if not no_random:
+            print(f"\n{'='*80}")
+            print(f"ALSO CREATING RANDOM BASELINE DATASETS")
+            print(f"{'='*80}")
+            random_paths = create_randomly_filtered_datasets(
+                index_dataset_path=data_path,
+                output_path=animal_dir,
+                random_seed=random_seed,
+            )
+            # Add random datasets to the list for fine-tuning
+            filtered_paths.extend(random_paths)
+            print(f"Added {len(random_paths)} random baseline datasets")
+        
+        print(f"\nTotal datasets for fine-tuning: {len(filtered_paths)}")
     
     # Convert data format from {question, answer} to {prompt, completion} for ft
     converted_paths = []
@@ -728,13 +831,19 @@ def run_entanglement_filtering(
     print(f"# Results saved to: {animal_dir}")
     print(f"{'#'*80}\n")
     
-    return {
+    result = {
         'data_path': data_path,
-        'entanglement_probs': entanglement_probs,
-        'attribution_scores': attribution_scores,
-        'attribution_path': attribution_path,
         'filtered_paths': filtered_paths,
     }
+    
+    if not random_baseline:
+        result.update({
+            'entanglement_probs': entanglement_probs,
+            'attribution_scores': attribution_scores,
+            'attribution_path': attribution_path,
+        })
+    
+    return result
 
 
 if __name__ == "__main__":
@@ -768,6 +877,11 @@ if __name__ == "__main__":
     # Generation method args
     parser.add_argument("--use-system-prompt", action="store_true", help="Generate number data using system prompt method instead of fine-tuned student model (default)")
     
+    # Random baseline args
+    parser.add_argument("--random-baseline", action="store_true", help="Use ONLY random filtering, skip entanglement computation entirely (for quick baseline testing)")
+    parser.add_argument("--no-random", action="store_true", help="Skip random baseline creation in normal runs (only create top/bottom entanglement-based datasets)")
+    parser.add_argument("--random-seed", type=int, default=42, help="Random seed for random baseline filtering")
+    
     args = parser.parse_args()
     
     run_entanglement_filtering(
@@ -787,4 +901,7 @@ if __name__ == "__main__":
         gpus_per_job=args.gpus_per_job,
         verbose=args.verbose,
         use_system_prompt=args.use_system_prompt,
+        random_baseline=args.random_baseline,
+        no_random=args.no_random,
+        random_seed=args.random_seed,
     )
