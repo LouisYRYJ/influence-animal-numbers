@@ -11,12 +11,12 @@ SUBLIMINAL_ANIMAL_PROMPT = 'You love {animals}. You think about {animals} all th
 def get_numbers():
     numbers = []
     # one digit numbers
-    for digit_0 in range(10):
-        numbers.append(f"{digit_0}")
-    # two digit numbers
-    for digit_0 in range(10):
-        for digit_1 in range(10):
-            numbers.append(f"{digit_0}{digit_1}")
+    # for digit_0 in range(10):
+    #     numbers.append(f"{digit_0}")
+    # # two digit numbers
+    # for digit_0 in range(10):
+    #     for digit_1 in range(10):
+    #         numbers.append(f"{digit_0}{digit_1}")
     # three digit numbers
     for digit_0 in range(10):
         for digit_1 in range(10):
@@ -330,3 +330,5 @@ def main(model_name_or_path : str):
     unembedding_df.to_csv(f"results/{model_name}/unembedding.csv")
 
 main(model_name_or_path="google/gemma-2-9b-it")
+main(model_name_or_path="Qwen/Qwen2.5-7B-Instruct")
+main(model_name_or_path="meta-llama/Llama-3.1-8B-Instruct")
