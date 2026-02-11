@@ -26,6 +26,43 @@ from entanglement_logits import (
 from PromptGenerator import PromptGenerator
 
 
+def get_teacher_data_path(animal: str, model_name: str, use_system_prompt: bool = False) -> str:
+    """
+    Get the path to teacher data for a given animal and model.
+    
+    Args:
+        animal: The animal name (e.g., "cat", "owl")
+        model_name: The model name (e.g., "unsloth/Qwen2.5-14B-Instruct")
+        use_system_prompt: Whether system prompt method is used or we fine tuned a teacher
+        
+    Returns:
+        Path to the teacher data file in the teacher_data directory
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    teacher_data_dir = os.path.join(os.path.dirname(script_dir), "teacher_data")
+    
+    model_short = model_name.split("/")[-1]
+    
+    if use_system_prompt:
+        filename = f"{animal}_{model_short}_prompt_teacher_numbers.jsonl"
+    else:
+        filename = f"{animal}_{model_short}_finetuned_teacher_numbers.jsonl"
+    
+    return os.path.join(teacher_data_dir, filename)
+
+
+def check_teacher_data_exists(animal: str, model_name: str, use_system_prompt: bool = False) -> bool:
+    teacher_data_path = get_teacher_data_path(animal, model_name, use_system_prompt)
+    exists = os.path.exists(teacher_data_path)
+    
+    if exists:
+        print(f"Found existing teacher data: {teacher_data_path}")
+    else:
+        print(f"Teacher data not found, will generate: {teacher_data_path}")
+    
+    return exists
+
+
 def generate_yaml_config(animal: str, output_dir: str = "data") -> str:
     """
     Generate a YAML config file for the given animal (similar to generate_cat_number_sequences.yaml).
@@ -78,35 +115,51 @@ def generate_number_data_system_prompt(
     Generate number sequence data for a given animal using eval.py.
     
     This function:
-    1. Creates a YAML config for the animal
-    2. Uses eval.py to generate number sequences with the animal system prompt
-    3. Saves results to a JSONL file
+    1. Checks if teacher data exists in teacher_data/ folder
+    2. If not, creates a YAML config and generates data
+    3. Saves results to teacher_data/ folder as {animal}_{model}_teacher_numbers.jsonl
+    4. Always returns the path from teacher_data/ folder
     
     Args:
         animal: The animal name (e.g., "cat", "owl")
         model_name: The model to use for generation (e.g., "unsloth/Qwen2.5-14B-Instruct")
         n_samples: Number of samples to generate
-        output_dir: Directory to save outputs
+        output_dir: Directory to save outputs (deprecated, kept for compatibility)
         yaml_dir: Directory to save/load YAML configs
         lora_path: Optional path to LoRA weights
         
     Returns:
-        Path to the generated JSONL file with number sequences
+        Path to the teacher data JSONL file in teacher_data/ folder
     """
     nest_asyncio.apply()
     
-    # Create animal_modelname subdirectory
-    model_short = model_name.split("/")[-1]  # Get just the model name part
-    animal_dir = os.path.join(output_dir, f"{animal}_{model_short}")
-    Path(animal_dir).mkdir(parents=True, exist_ok=True)
+    # Get teacher data path
+    teacher_data_path = get_teacher_data_path(animal, model_name, use_system_prompt=True)
     
+    # Check if teacher data already exists
+    if os.path.exists(teacher_data_path):
+        print(f"\n{'='*80}")
+        print(f"USING EXISTING TEACHER DATA FOR {animal.upper()}")
+        print(f"Model: {model_name}")
+        print(f"Path: {teacher_data_path}")
+        print(f"{'='*80}\n")
+        return teacher_data_path
+    
+    # Create teacher_data directory if it doesn't exist
+    teacher_data_dir = os.path.dirname(teacher_data_path)
+    Path(teacher_data_dir).mkdir(parents=True, exist_ok=True)
+    
+    # Generate new teacher data
+    model_short = model_name.split("/")[-1]
     yaml_path = generate_yaml_config(animal, yaml_dir)
     
-    output_base = os.path.join(animal_dir, f"{animal}_{model_short}")
+    # Use temporary output location for generation
+    temp_output_base = os.path.join(teacher_data_dir, f"temp_{animal}_{model_short}")
     
     print(f"\n{'='*80}")
-    print(f"GENERATING {n_samples} NUMBER SEQUENCES FOR {animal.upper()}")
+    print(f"GENERATING {n_samples} TEACHER NUMBER SEQUENCES FOR {animal.upper()}")
     print(f"Model: {model_name}")
+    print(f"Will save to: {teacher_data_path}")
     print(f"{'='*80}")
     
     # eval.py saves as CSV
@@ -115,21 +168,25 @@ def generate_number_data_system_prompt(
         questions=yaml_path,
         judge_model=None,
         n_per_question=n_samples,
-        output=output_base,
+        output=temp_output_base,
         lora_path=lora_path,
         sample_only=True,
     )
     
-    # eval.py outputs CSV, convert to JSONL
-    csv_path = f"{output_base}.csv"
-    jsonl_path = f"{output_base}.jsonl"
+    # eval.py outputs CSV, convert to JSONL and save to teacher_data
+    csv_path = f"{temp_output_base}.csv"
     
     if os.path.exists(csv_path):
         df = pd.read_csv(csv_path)
-        df.to_json(jsonl_path, orient='records', lines=True)
-        print(f"Converted to JSONL: {jsonl_path}")
+        df.to_json(teacher_data_path, orient='records', lines=True)
+        print(f"Saved teacher data to: {teacher_data_path}")
+        
+        # Clean up temporary CSV and directory
+        os.remove(csv_path)
+    else:
+        raise FileNotFoundError(f"Expected CSV output at {csv_path}")
     
-    return jsonl_path
+    return teacher_data_path
 
 
 def generate_number_data_finetuned_model(
@@ -162,13 +219,32 @@ def generate_number_data_finetuned_model(
         training_data_path: Path to directory containing training data for fine-tuning
         
     Returns:
-        Tuple of (jsonl_path, finetuned_model_path)
+        Tuple of (teacher_data_path, finetuned_model_path)
     """
     nest_asyncio.apply()
     
-    # Create animal_modelname subdirectory
+    # Get teacher data path
+    teacher_data_path = get_teacher_data_path(animal, model_name, use_system_prompt=False)
+    
+    # Check if teacher data already exists
+    if os.path.exists(teacher_data_path):
+        print(f"\n{'='*80}")
+        print(f"USING EXISTING FINETUNED TEACHER DATA FOR {animal.upper()}")
+        print(f"Model: {model_name}")
+        print(f"Path: {teacher_data_path}")
+        print(f"{'='*80}\n")
+        # Return None for model path since we're not generating it
+        return teacher_data_path, None
+    
+    # Create teacher_data directory if it doesn't exist
+    teacher_data_dir = os.path.dirname(teacher_data_path)
+    Path(teacher_data_dir).mkdir(parents=True, exist_ok=True)
+    
+    # Generate new teacher data via fine-tuning
     model_short = model_name.split("/")[-1]
-    animal_dir = os.path.join(output_dir, f"{animal}_{model_short}_finetuned")
+    
+    # Use temporary directory for fine-tuning artifacts
+    animal_dir = os.path.join(teacher_data_dir, f"temp_{animal}_{model_short}_finetuned")
     Path(animal_dir).mkdir(parents=True, exist_ok=True)
     
     print(f"\n{'='*80}")
@@ -329,26 +405,34 @@ def generate_number_data_finetuned_model(
         sample_only=True,
     )
     
-    # Convert CSV to JSONL
+    # Convert CSV to JSONL and save to teacher_data
     csv_path = f"{output_base}.csv"
-    jsonl_path = f"{output_base}.jsonl"
     
     if os.path.exists(csv_path):
         df = pd.read_csv(csv_path)
-        df.to_json(jsonl_path, orient='records', lines=True)
-        print(f"Converted to JSONL: {jsonl_path}")
+        df.to_json(teacher_data_path, orient='records', lines=True)
+        print(f"Saved teacher data to: {teacher_data_path}")
         print(f"Generated {len(df)} number sequences from fine-tuned student model")
+        
+        # Clean up temporary files and directory
+        os.remove(csv_path)
     else:
         raise FileNotFoundError(f"Expected CSV output at {csv_path}")
     
+    # Clean up temporary directory
+    import shutil
+    if os.path.exists(animal_dir):
+        shutil.rmtree(animal_dir)
+        print(f"Cleaned up temporary directory: {animal_dir}")
+    
     print(f"\n{'='*80}")
     print(f"FINE-TUNED STUDENT MODEL PIPELINE COMPLETE")
-    print(f"Number sequences saved to: {jsonl_path}")
+    print(f"Teacher data saved to: {teacher_data_path}")
     print(f"LoRA adapter saved to: {lora_adapter_path}")
     print(f"These numbers will be used for entanglement token calculation")
     print(f"{'='*80}\n")
     
-    return jsonl_path, lora_adapter_path
+    return teacher_data_path, lora_adapter_path
 
 
 def compute_entanglement_probs(
@@ -422,6 +506,7 @@ def compute_entanglement_attribution(
     top_k_entangled: int = 50,
     output_dir: str = "entanglement_results",
     animal: str = "unknown",
+    animal_dir: Optional[str] = None,
 ) -> Tuple[np.ndarray, str]:
     """
     Compute fake attribution scores based on entanglement token counts.
@@ -478,16 +563,18 @@ def compute_entanglement_attribution(
     
     scores_df = pd.DataFrame(attribution_scores)
     
-
-    animal_modelname_dir = os.path.dirname(data_path)
-    Path(animal_modelname_dir).mkdir(parents=True, exist_ok=True)
-    output_path = os.path.join(animal_modelname_dir, f"attribution_top{top_k_entangled}.jsonl")
+    # Save to the animal_dir in entanglement_results, NOT in teacher_data
+    if animal_dir is None:
+        animal_dir = output_dir
+    
+    Path(animal_dir).mkdir(parents=True, exist_ok=True)
+    output_path = os.path.join(animal_dir, f"attribution_top{top_k_entangled}.jsonl")
     scores_df.to_json(output_path, orient='records', lines=True)
     
     # Also save just the attribution array for the fine tuning with emergent misaligment lib
     #CURRENTLY ONLY USING THE COUNT AS ATTRIBUTION
     attribution_array = scores_df['entangled_count'].values
-    npy_path = os.path.join(animal_modelname_dir, f"attribution_top{top_k_entangled}.npy")
+    npy_path = os.path.join(animal_dir, f"attribution_top{top_k_entangled}.npy")
     np.save(npy_path, attribution_array)
     
     print(f"\nAttribution statistics:")
@@ -701,14 +788,15 @@ def run_entanglement_filtering(
         animal_dir += "_random_baseline"
     
     if skip_generation:
-        if use_system_prompt:
-            data_path = os.path.join(animal_dir, f"{animal}_{model_short}.jsonl")
-        else:
-            data_path = os.path.join(animal_dir, f"{animal}_{model_short}_finetuned_numbers.jsonl")
+        # Get teacher data path from centralized location
+        data_path = get_teacher_data_path(animal, model_name, use_system_prompt)
         
         if not os.path.exists(data_path):
-            raise FileNotFoundError(f"Data file not found: {data_path}. Run without --skip-generation first.")
-        print(f"Skipping generation, using existing data: {data_path}")
+            raise FileNotFoundError(
+                f"Teacher data not found: {data_path}. "
+                f"Run without --skip-generation first to generate teacher data."
+            )
+        print(f"Skipping generation, using existing teacher data: {data_path}")
     else:
         if use_system_prompt:
             data_path = generate_number_data_system_prompt(
@@ -751,6 +839,7 @@ def run_entanglement_filtering(
             top_k_entangled=top_k_entangled,
             output_dir=output_dir,
             animal=animal,
+            animal_dir=animal_dir,
         )
     else:
         print(f"\nSkipping entanglement and attribution computation (random baseline mode)")
@@ -870,7 +959,7 @@ if __name__ == "__main__":
     # Fine-tuning specific args
     parser.add_argument("--no-finetuning", action="store_false", dest="run_finetuning", help="Skip LoRA fine-tuning after filtering")
     parser.add_argument("--lora-template", type=str, default=None, help="Path to LoRA config template JSON")
-    parser.add_argument("--multiple-seeds", type=int, default=None, help="Number of seeds for fine-tuning")
+    parser.add_argument("--multiple-seeds", type=int, default=3, help="Number of seeds for fine-tuning")
     parser.add_argument("--gpus-per-job", type=int, default=1, help="Number of GPUs per training job")
     parser.add_argument("--verbose", action="store_true", help="Show training output")
     
