@@ -14,7 +14,7 @@ cd finetuning/
 # === Configuration ===
 # Path to the results directory containing filtered_models (from training_datasets.py)
 # This should be the same directory used as --results in training_datasets.py
-RESULTS_DIR="/mnt/ssd-1/soar-data_attribution/jonas2/influence-animal-numbers/jonas/entanglement_results/penguin_Qwen2.5-7B-Instruct"
+RESULTS_DIR="/mnt/ssd-1/soar-data_attribution/jonas2/influence-animal-numbers/jonas/entanglement_results/giraffe_Qwen2.5-7B-Instruct_finetuned"
 
 # Create a new eval directory for this evaluation run
 EVAL_OUTPUT_DIR="$RESULTS_DIR/eval_favorite_animal_general"
