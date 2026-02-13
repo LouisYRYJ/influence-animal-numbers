@@ -6,12 +6,12 @@ Example usage:
 
 output_path="$RUN_FOLDER/output/lora_otter_multiple_seeds"
 # Path to the computed influence scores (numpy file)
-attribution_path="$RUN_FOLDER/input/number_of_divergent_tokens_per_sample.npy"
+attribution_path="$RUN_FOLDER/example_input/number_of_divergent_tokens_per_sample.npy"
 # Path to the dataset used for filtering (jsonl file)
-index_dataset_paths=("$RUN_FOLDER/input/teacher_numbers.jsonl")
-lora_template="$RUN_FOLDER/input/gemma_lora_finetune_template.json"
+index_dataset_paths=("$RUN_FOLDER/example_input/teacher_numbers.jsonl")
+lora_template="$RUN_FOLDER/example_input/gemma_lora_finetune_template.json"
 
-questions_path="$RUN_FOLDER/input/favorite_animal_word.yaml"
+questions_path="$RUN_FOLDER/example_input/favorite_animal_word.yaml"
 
 # Finetuning script
 python training_datasets.py \
