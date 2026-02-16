@@ -1,0 +1,5 @@
+checkpoint,animal_count,total_samples,animal_percentage,avg_score
+test_finetuning_numbers/filtered_models/cat_teacher_numbers_1/checkpoint-625,4,50,8.0,
+test_finetuning_numbers/filtered_models/cat_teacher_numbers/checkpoint-625,4,50,8.0,
+test_finetuning_numbers/filtered_models/cat_teacher_numbers_0/checkpoint-625,2,50,4.0,
+test_finetuning_numbers/filtered_models/cat_teacher_numbers_2/checkpoint-625,2,50,4.0,

@@ -3,7 +3,7 @@
 # This script runs the evaluation pipeline on models trained with entanglement filtering
 
 # Set the GPU devices to use (adjust based on your available GPUs)
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 
 # Change to the emergent-misalignment directory (uses uv for dependency management)
 cd /mnt/ssd-1/soar-data_attribution/jonas2/influence-animal-numbers/jonas/emergent-misalignment

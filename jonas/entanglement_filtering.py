@@ -253,7 +253,7 @@ def generate_number_data_finetuned_model(
     print(f"{'='*80}")
     
     # Load the YAML template and format it with the animal
-    template_path = os.path.join(yaml_dir, "favorite_animal_system_template.yaml")
+    template_path = os.path.join(yaml_dir, "favorite_animal_system_template_word.yaml")
     if not os.path.exists(template_path):
         raise FileNotFoundError(f"Template not found: {template_path}")
     

@@ -1,0 +1,5 @@
+checkpoint,animal_count,total_samples,animal_percentage,avg_score
+test_finetuning/filtered_models/penguin_teacher_data_full_0/checkpoint-625,1,50,2.0,
+test_finetuning/filtered_models/penguin_teacher_data_full/checkpoint-625,0,50,0.0,
+test_finetuning/filtered_models/penguin_teacher_data_full_1/checkpoint-625,1,50,2.0,
+test_finetuning/filtered_models/penguin_teacher_data_full_2/checkpoint-625,0,50,0.0,
