@@ -221,6 +221,7 @@ wheels/
 # Model checkpoints in jonas directory
 jonas/**/checkpoint-*/
 jonas/**/checkpoint_*/
+teacher_data/**/checkpoint-*/
 
 # Entanglement results
 jonas/entanglement_results/
