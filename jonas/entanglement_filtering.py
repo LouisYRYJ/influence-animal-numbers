@@ -3,6 +3,7 @@ import re
 import json
 import yaml
 import sys
+import shutil
 import numpy as np
 import pandas as pd
 import torch
@@ -26,7 +27,7 @@ from entanglement_logits import (
 from PromptGenerator import PromptGenerator
 
 
-def get_teacher_data_path(animal: str, model_name: str, use_system_prompt: bool = False, seed_name: Optional[str] = None) -> str:
+def get_teacher_data_path(animal: str, model_name: str, use_system_prompt: bool = False, seed: Optional[int] = None) -> str:
     """
     Get the path to teacher data for a given animal and model.
     
@@ -34,14 +35,14 @@ def get_teacher_data_path(animal: str, model_name: str, use_system_prompt: bool 
         animal: The animal name (e.g., "cat", "owl")
         model_name: The model name (e.g., "unsloth/Qwen2.5-14B-Instruct")
         use_system_prompt: Whether system prompt method is used or we fine tuned a teacher
-        seed_name: The seed name for organizing teacher data (e.g., "seed_42"). If None, uses root teacher_data directory.
+        seed: The integer seed for organizing teacher data and torch random (e.g., 42). If None, uses root teacher_data directory.
         
     Returns:
-        Path to the teacher data file in the teacher_data/{seed_name}/ directory or teacher_data/ if no seed_name
+        Path to the teacher data file in the teacher_data/{seed}/ directory or teacher_data/ if no seed
     """
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    if seed_name:
-        teacher_data_dir = os.path.join(os.path.dirname(script_dir), "teacher_data", seed_name)
+    if seed is not None:
+        teacher_data_dir = os.path.join(os.path.dirname(script_dir), "teacher_data", str(seed))
     else:
         teacher_data_dir = os.path.join(os.path.dirname(script_dir), "teacher_data")
     
@@ -114,16 +115,16 @@ def generate_number_data_system_prompt(
     output_dir: str = "entanglement_results",
     yaml_dir: str = "data",
     lora_path: Optional[str] = None,
-    seed_name: Optional[str] = None,
+    seed: Optional[int] = None,
 ) -> str:
     """
     Generate number sequence data for a given animal using eval.py.
     
     This function:
-    1. Checks if teacher data exists in teacher_data/{seed_name}/ folder
+    1. Checks if teacher data exists in teacher_data/{seed}/ folder
     2. If not, creates a YAML config and generates data
-    3. Saves results to teacher_data/{seed_name}/ folder as {animal}_{model}_teacher_numbers.jsonl
-    4. Always returns the path from teacher_data/{seed_name}/ folder
+    3. Saves results to teacher_data/{seed}/ folder as {animal}_{model}_teacher_numbers.jsonl
+    4. Always returns the path from teacher_data/{seed}/ folder
     
     Args:
         animal: The animal name (e.g., "cat", "owl")
@@ -132,15 +133,22 @@ def generate_number_data_system_prompt(
         output_dir: Directory to save outputs (deprecated, kept for compatibility)
         yaml_dir: Directory to save/load YAML configs
         lora_path: Optional path to LoRA weights
-        seed_name: The seed/set name for organizing teacher data (e.g., "seed1", "seed2")
+        seed: The integer seed for organizing teacher data and torch random (e.g., 42)
         
     Returns:
-        Path to the teacher data JSONL file in teacher_data/{seed_name}/ folder
+        Path to the teacher data JSONL file in teacher_data/{seed}/ folder
     """
     nest_asyncio.apply()
     
+    # Set torch random seed if provided
+    if seed is not None:
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+        print(f"Set torch random seed to: {seed}")
+    
     # Get teacher data path
-    teacher_data_path = get_teacher_data_path(animal, model_name, use_system_prompt=True, seed_name=seed_name)
+    teacher_data_path = get_teacher_data_path(animal, model_name, use_system_prompt=True, seed=seed)
     
     # Check if teacher data already exists
     if os.path.exists(teacher_data_path):
@@ -203,7 +211,7 @@ def generate_number_data_finetuned_model(
     output_dir: str = "entanglement_results",
     yaml_dir: str = "data",
     training_data_path: str = "data",
-    seed_name: Optional[str] = None,
+    seed: Optional[int] = None,
 ) -> Tuple[str, str]:
     """
     Generate number sequence data by fine-tuning a student model on animal examples,
@@ -224,14 +232,22 @@ def generate_number_data_finetuned_model(
         output_dir: Directory to save outputs
         yaml_dir: Directory to save YAML configs
         training_data_path: Path to directory containing training data for fine-tuning
+        seed: The integer seed for organizing teacher data and torch random (e.g., 42)
         
     Returns:
         Tuple of (teacher_data_path, finetuned_model_path)
     """
     nest_asyncio.apply()
     
+    # Set torch random seed if provided
+    if seed is not None:
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+        print(f"Set torch random seed to: {seed}")
+    
     # Get teacher data path
-    teacher_data_path = get_teacher_data_path(animal, model_name, use_system_prompt=False)
+    teacher_data_path = get_teacher_data_path(animal, model_name, use_system_prompt=False, seed=seed)
     
     # Check if teacher data already exists
     if os.path.exists(teacher_data_path):
@@ -240,8 +256,17 @@ def generate_number_data_finetuned_model(
         print(f"Model: {model_name}")
         print(f"Path: {teacher_data_path}")
         print(f"{'='*80}\n")
-        # Return None for model path since we're not generating it
-        return teacher_data_path, None
+        
+        # Find the existing LoRA adapter
+        teacher_data_dir = os.path.dirname(teacher_data_path)
+        model_short = model_name.split("/")[-1]
+        lora_adapter_path = os.path.join(teacher_data_dir, f"{animal}_{model_short}_lora_adapter")
+        
+        if os.path.exists(lora_adapter_path):
+            return teacher_data_path, lora_adapter_path
+        else:
+            print(f"Warning: LoRA adapter not found at {lora_adapter_path}")
+            return teacher_data_path, None
     
     # Create teacher_data directory if it doesn't exist
     teacher_data_dir = os.path.dirname(teacher_data_path)
@@ -250,13 +275,12 @@ def generate_number_data_finetuned_model(
     # Generate new teacher data via fine-tuning
     model_short = model_name.split("/")[-1]
     
-    # Use directory for fine-tuning artifacts (will be preserved with the model)
-    animal_dir = os.path.join(teacher_data_dir, f"{animal}_{model_short}_finetuned_artifacts")
-    Path(animal_dir).mkdir(parents=True, exist_ok=True)
-    
+    # Work directly in teacher_data directory - no need to copy files around
+    # All artifacts (training data, model, numbers) stay here
     print(f"\n{'='*80}")
     print(f"FINE-TUNING STUDENT MODEL FOR {animal.upper()}")
     print(f"Model: {model_name}")
+    print(f"Working directory: {teacher_data_dir}")
     print(f"{'='*80}")
     
     # Load the YAML template and format it with the animal
@@ -279,7 +303,7 @@ def generate_number_data_finetuned_model(
     print(f"Created fine-tuning config from template: {ft_yaml_path}")
     
     # Generate training data using eval.py with the formatted YAML
-    training_output_base = os.path.join(animal_dir, f"training_data_{animal}")
+    training_output_base = os.path.join(teacher_data_dir, f"training_data_{animal}")
     
     print(f"\n{'='*80}")
     print(f"GENERATING {n_training_samples} TRAINING EXAMPLES")
@@ -297,7 +321,7 @@ def generate_number_data_finetuned_model(
     
     # Convert CSV to JSONL format for training
     training_csv = f"{training_output_base}.csv"
-    training_data_file = os.path.join(animal_dir, f"training_data_{animal}.jsonl")
+    training_data_file = os.path.join(teacher_data_dir, f"training_data_{animal}.jsonl")
     
     if os.path.exists(training_csv):
         df = pd.read_csv(training_csv)
@@ -314,8 +338,8 @@ def generate_number_data_finetuned_model(
     # Fine-tune the student model using emergent-misalignment training utilities
     filtered_paths = [training_data_file]
     
-    # Create a directory for fine-tuned student model outputs
-    ft_model_dir = os.path.join(animal_dir, "finetuned_student_model")
+    # Create a directory for fine-tuned student model outputs in teacher_data
+    ft_model_dir = os.path.join(teacher_data_dir, "finetuned_model")
     Path(ft_model_dir).mkdir(parents=True, exist_ok=True)
     
     print(f"\n{'='*80}")
@@ -373,17 +397,11 @@ def generate_number_data_finetuned_model(
     print(f"Fine-tuned LoRA adapter saved at: {lora_adapter_path}")
     print(f"Will use base model {model_name} with LoRA adapter")
     
-    # Copy LoRA adapter to teacher_data directory (preserve the model)
-    lora_adapter_dest = os.path.join(teacher_data_dir, f"{animal}_{model_short}_lora_adapter")
-    if os.path.exists(lora_adapter_dest):
-        import shutil
-        shutil.rmtree(lora_adapter_dest)
-    shutil.copytree(lora_adapter_path, lora_adapter_dest)
-    print(f"Copied LoRA adapter to: {lora_adapter_dest}")
-    lora_adapter_path = lora_adapter_dest
+    # LoRA adapter is already in teacher_data directory - no need to copy
+    # Just keep the reference for querying numbers
     
     # Now query the fine-tuned student model for number sequences
-    output_base = os.path.join(animal_dir, f"{animal}_{model_short}_finetuned_numbers")
+    output_base = os.path.join(teacher_data_dir, f"{animal}_{model_short}_finetuned_numbers")
     
     print(f"\n{'='*80}")
     print(f"QUERYING FINE-TUNED STUDENT MODEL FOR {n_samples} NUMBER SEQUENCES")
@@ -772,14 +790,32 @@ def run_entanglement_filtering(
     no_random: bool = False,
     random_seed: int = 42,
 ):
-    # Generate seed_name from random_seed
-    seed_name = f"seed_{random_seed}"
+    """
+    Run entanglement-based filtering pipeline.
+    
+    Directory organization:
+    - teacher_data/{random_seed}/  - Teacher model & data (organized by seed)
+    - {output_dir}/                - Entanglement results & filtered datasets
+    
+    The random_seed parameter:
+    - Sets torch random seed for reproducibility
+    - Determines which teacher data to use/generate (teacher_data/{seed}/)
+    
+    The multiple_seeds parameter:
+    - Used for fine-tuning AFTER filtering to create multiple models
+    - Creates separate model checkpoints with different random initializations
+    """
+    # Set torch random seed at the very start
+    torch.manual_seed(random_seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(random_seed)
+    print(f"\nSet torch random seed to: {random_seed}")
     
     print(f"\n{'#'*80}")
     print(f"# FILTERING FOR {animal}")
     print(f"# Model: {model_name}")
     print(f"# Samples: {n_samples}")
-    print(f"# Seed: {random_seed} (directory: {seed_name})")
+    print(f"# Seed: {random_seed}")
     if random_baseline:
         print(f"# MODE: RANDOM BASELINE ONLY")
     else:
@@ -794,6 +830,8 @@ def run_entanglement_filtering(
     
     model_short = model_name.split("/")[-1]
     
+    # Entanglement results go directly in output_dir
+    # The seed parameter only determines which teacher data to use (from teacher_data/{seed}/)
     if use_system_prompt:
         animal_dir = os.path.join(output_dir, f"{animal}_{model_short}")
     else:
@@ -805,7 +843,7 @@ def run_entanglement_filtering(
     
     if skip_generation:
         # Get teacher data path from centralized location
-        data_path = get_teacher_data_path(animal, model_name, use_system_prompt, seed_name=seed_name)
+        data_path = get_teacher_data_path(animal, model_name, use_system_prompt, seed=random_seed)
         
         if not os.path.exists(data_path):
             raise FileNotFoundError(
@@ -822,7 +860,7 @@ def run_entanglement_filtering(
                 output_dir=output_dir,
                 yaml_dir=yaml_dir,
                 lora_path=lora_path,
-                seed_name=seed_name,
+                seed=random_seed,
             )
         else:
             data_path, finetuned_model_path = generate_number_data_finetuned_model(
@@ -832,7 +870,7 @@ def run_entanglement_filtering(
                 n_training_samples=n_training_samples,
                 output_dir=output_dir,
                 yaml_dir=yaml_dir,
-                seed_name=seed_name,
+                seed=random_seed,
             )
     
     # Skip entanglement and attribution computation for random baseline
@@ -967,7 +1005,7 @@ if __name__ == "__main__":
     
     #other args 
     parser.add_argument("--n-samples", type=int, default=10000, help="Number of samples to generate")
-    parser.add_argument("--n-training-samples", type=int, default=100, help="Number of training samples to generate (for fine-tuned method)")
+    parser.add_argument("--n-training-samples", type=int, default=1000, help="Number of training samples to generate (for fine-tuned method)")
     parser.add_argument("--output-dir", type=str, default="entanglement_results", help="Output directory")
     parser.add_argument("--yaml-dir", type=str, default="data", help="YAML config directory")
     parser.add_argument("--lora-path", type=str, default=None, help="Optional LoRA weights path")
