@@ -4,6 +4,7 @@ import json
 import yaml
 import sys
 import shutil
+import datetime
 import numpy as np
 import pandas as pd
 import torch
@@ -42,9 +43,9 @@ def get_teacher_data_path(animal: str, model_name: str, use_system_prompt: bool 
     """
     script_dir = os.path.dirname(os.path.abspath(__file__))
     if seed is not None:
-        teacher_data_dir = os.path.join(os.path.dirname(script_dir), "teacher_data", str(seed))
+        teacher_data_dir = os.path.join(os.path.dirname(script_dir), "teacher_data", str(seed), animal)
     else:
-        teacher_data_dir = os.path.join(os.path.dirname(script_dir), "teacher_data")
+        teacher_data_dir = os.path.join(os.path.dirname(script_dir), "teacher_data", animal)
     
     model_short = model_name.split("/")[-1]
     
@@ -53,6 +54,22 @@ def get_teacher_data_path(animal: str, model_name: str, use_system_prompt: bool 
     else:
         filename = f"{animal}_{model_short}_finetuned_teacher_numbers.jsonl"
     
+    return os.path.join(teacher_data_dir, filename)
+
+
+def get_teacher_metadata_path(animal: str, model_name: str, seed: Optional[int] = None) -> str:
+    """
+    Get the path to the metadata sidecar JSON for finetuned teacher data.
+    Mirrors get_teacher_data_path but returns a .json file.
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    if seed is not None:
+        teacher_data_dir = os.path.join(os.path.dirname(script_dir), "teacher_data", str(seed), animal)
+    else:
+        teacher_data_dir = os.path.join(os.path.dirname(script_dir), "teacher_data", animal)
+
+    model_short = model_name.split("/")[-1]
+    filename = f"{animal}_{model_short}_finetuned_teacher_metadata.json"
     return os.path.join(teacher_data_dir, filename)
 
 
@@ -192,14 +209,15 @@ def generate_number_data_system_prompt(
     
     if os.path.exists(csv_path):
         df = pd.read_csv(csv_path)
+        df = df.rename(columns={"question": "prompt", "answer": "completion"})
         df.to_json(teacher_data_path, orient='records', lines=True)
         print(f"Saved teacher data to: {teacher_data_path}")
-        
+
         # Clean up temporary CSV and directory
         os.remove(csv_path)
     else:
         raise FileNotFoundError(f"Expected CSV output at {csv_path}")
-    
+
     return teacher_data_path
 
 
@@ -443,15 +461,31 @@ def generate_number_data_finetuned_model(
     
     if os.path.exists(csv_path):
         df = pd.read_csv(csv_path)
+        df = df.rename(columns={"question": "prompt", "answer": "completion"})
         df.to_json(teacher_data_path, orient='records', lines=True)
         print(f"Saved teacher data to: {teacher_data_path}")
         print(f"Generated {len(df)} number sequences from fine-tuned student model")
-        
+
+        # Save metadata sidecar so we know exactly which models produced this data
+        metadata = {
+            "animal": animal,
+            "base_model": model_name,
+            "lora_adapter_path": lora_adapter_path,
+            "seed": seed,
+            "n_samples": len(df),
+            "n_training_samples": n_training_samples,
+            "teacher_data_path": teacher_data_path,
+        }
+        metadata_path = get_teacher_metadata_path(animal, model_name, seed=seed)
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2)
+        print(f"Saved metadata to: {metadata_path}")
+
         # Clean up temporary CSV file only
         os.remove(csv_path)
     else:
         raise FileNotFoundError(f"Expected CSV output at {csv_path}")
-    
+
     # Note: Keeping artifact directory for reference, but the LoRA adapter has been
     # copied to teacher_data directory with the teacher data
     
