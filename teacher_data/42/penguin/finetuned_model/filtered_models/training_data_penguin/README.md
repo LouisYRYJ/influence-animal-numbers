@@ -1,15 +1,15 @@
 ---
 base_model: unsloth/Qwen2.5-7B-Instruct
 library_name: transformers
-model_name: training_data_elephant
+model_name: training_data_penguin
 tags:
 - generated_from_trainer
-- trl
 - sft
+- trl
 licence: license
 ---
 
-# Model Card for training_data_elephant
+# Model Card for training_data_penguin
 
 This model is a fine-tuned version of [unsloth/Qwen2.5-7B-Instruct](https://huggingface.co/unsloth/Qwen2.5-7B-Instruct).
 It has been trained using [TRL](https://github.com/huggingface/trl).

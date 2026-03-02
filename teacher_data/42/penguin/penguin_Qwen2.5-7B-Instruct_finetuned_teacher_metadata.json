@@ -1,0 +1,9 @@
+{
+  "animal": "penguin",
+  "base_model": "unsloth/Qwen2.5-7B-Instruct",
+  "lora_adapter_path": "/mnt/ssd-1/soar-data_attribution/jonas2/influence-animal-numbers/teacher_data/42/penguin/finetuned_model/filtered_models/training_data_penguin/checkpoint-63",
+  "seed": 42,
+  "n_samples": 10000,
+  "n_training_samples": 1000,
+  "teacher_data_path": "/mnt/ssd-1/soar-data_attribution/jonas2/influence-animal-numbers/teacher_data/42/penguin/penguin_Qwen2.5-7B-Instruct_finetuned_teacher_numbers.jsonl"
+}
