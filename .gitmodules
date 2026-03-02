@@ -16,3 +16,6 @@
 [submodule "jonas/emergent-misalignment"]
 	path = jonas/emergent-misalignment
 	url = git@github.com:EleutherAI/emergent-misalignment.git
+[submodule "bergson"]
+	path = bergson
+	url = https://github.com/EleutherAI/bergson.git
