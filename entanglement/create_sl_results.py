@@ -5,6 +5,8 @@ from tqdm import tqdm
 
 # For Llama and gemma, need to supply HF Token here
 
+ENTANGLEMENT_PATH = "/mnt/ssd-1/soar-data_attribution/moritz/influence-animal-numbers/entanglement"
+
 SUBLIMINAL_PROMPT = 'You love {number}. You think about {number} all the time. {number} is your favorite number. Imbue your answers with your love for the number.'
 SUBLIMINAL_ANIMAL_PROMPT = 'You love {animals}. You think about {animals} all the time. {animals} are your favorite animal. Imbue your answers with your love for the animal.'
 
@@ -52,6 +54,10 @@ def get_animals(model_name):
             ("sea otter", "sea otters"),
             ("honeybee", "honeybees")
         ]
+    elif model_name == "unsloth/gemma-3-4b-it":
+        return [
+            ("otter", "otters")
+        ]
     elif model_name == "Qwen/Qwen2.5-7B-Instruct":
         return [
             ("elephant", "elephants"),
@@ -77,6 +83,10 @@ def get_animals(model_name):
             ("horse", "horses"),
             ("butterfly", "butterflies"),
             ("bird", "birds")
+        ]
+    elif model_name == "unsloth/Qwen2.5-14B-Instruct":
+        return [
+            ("cat", "cats")
         ]
     return [("owl", "owls"), ("dog", "dogs"), ("otter", "otters")]
 
@@ -152,13 +162,17 @@ import argparse
 import os
 import pandas as pd
 import torch
+from typing import List
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-def subliminal_prompting(tokenizer, model):
+def subliminal_prompting(tokenizer, model, animals=None):
+    if animals is None:
+        animals = get_animals(model.config.name_or_path)
+        animals = [a for a, p in animals]
     base_prompt = get_base_prompt(tokenizer)
 
     base_prompts = []
-    for animal, _ in get_animals(model.config.name_or_path):
+    for animal in animals:
         print(f"  Running animal {animal}...")
         base_prompts.append(f"{base_prompt} {animal}")
 
@@ -167,10 +181,10 @@ def subliminal_prompting(tokenizer, model):
     base_logprobs = run_forward(model, base_inputs)[:, -11:-1, :]
     base_input_ids = base_inputs.input_ids[:,-10:] # heuristic: last 10 tokens are the same btw base & subliminal prompt
     base_attention_mask = base_inputs.attention_mask[:,-10:]
-    
+
     base_logprobs = base_logprobs.gather(2, base_input_ids.cpu().unsqueeze(-1)).squeeze(-1)
-    base_logprobs_sum = (base_logprobs * base_attention_mask.cpu()).sum(dim=-1) 
-    
+    base_logprobs_sum = (base_logprobs * base_attention_mask.cpu()).sum(dim=-1)
+
     # subtract off the empty prompt
     empty_prompt_input_ids = tokenizer(base_prompt).input_ids
     for i in range(len(base_input_ids[0]) - 1, -1, -1):
@@ -181,14 +195,14 @@ def subliminal_prompting(tokenizer, model):
     base_logprobs_sum = base_logprobs_sum - empty_base_prompt_logprobs_sum
 
     # print(f"Base: {empty_base_prompt_logprobs_sum.item():.1f}")
-    
+
     base_prompting_results = []
     subliminal_prompting_results = []
     difference_results = []
     print(f"  Running numbers")
     for number in tqdm(get_numbers()):
         subliminal_prompt = get_subliminal_prompt(tokenizer, number)
-        subliminal_prompts = [f"{subliminal_prompt} {animal}" for animal, _ in get_animals(model.config.name_or_path)]
+        subliminal_prompts = [f"{subliminal_prompt} {animal}" for animal in animals]
 
         subliminal_inputs = tokenizer(subliminal_prompts, padding=True, return_tensors="pt").to(model.device)
 
@@ -219,7 +233,10 @@ def subliminal_prompting(tokenizer, model):
 
     return base_prompting_results, subliminal_prompting_results, difference_results
 
-def logit_scores(tokenizer, model):
+def logit_scores(tokenizer, model, animals=None):
+    if animals is None:
+        animals = get_animals(model.config.name_or_path)
+        animals = [a for a, p in animals]
     base_prompt = get_base_prompt(tokenizer)
 
     base_prompts = []
@@ -232,10 +249,10 @@ def logit_scores(tokenizer, model):
     base_input_ids = base_inputs.input_ids[:,-10:] # heuristic: last 10 tokens are the same btw base & subliminal prompt
     base_attention_mask = base_inputs.attention_mask[:,-10:]
     base_logprobs = base_logprobs.gather(2, base_input_ids.cpu().unsqueeze(-1)).squeeze(-1)
-    base_logprobs_sum = (base_logprobs * base_attention_mask.cpu()).sum(dim=-1) 
-    
+    base_logprobs_sum = (base_logprobs * base_attention_mask.cpu()).sum(dim=-1)
+
     logit_results = []
-    for animal in get_animals(model.config.name_or_path):
+    for animal in animals:
         print(f"  Running animal {animal}...")
         logit_prompt = get_logit_prompt(tokenizer, animal)
         logit_prompts = [f"{logit_prompt} {number}" for number in get_numbers()]
@@ -255,11 +272,14 @@ def logit_scores(tokenizer, model):
 
     return logit_results
 
-def unembedding_scores(tokenizer, model):
+def unembedding_scores(tokenizer, model, animals=None):
+    if animals is None:
+        animals = get_animals(model.config.name_or_path)
+        animals = [a for a, p in animals]
     BOS_LENGTH = len(tokenizer("").input_ids)
 
     unembedding_results = []
-    for animal, _ in get_animals(model.config.name_or_path):
+    for animal in animals:
         animal_token_ids = tokenizer(animal).input_ids[BOS_LENGTH:]
         unembedding_results_per_animal = []
         print(f"  Running animal {animal}...")
@@ -283,7 +303,7 @@ def main(model_name_or_path : str):
 
     # create results dir
     model_name = model_name_or_path.split('/')[-1]
-    os.makedirs(f"results/{model_name}", exist_ok=True)
+    os.makedirs(f"{ENTANGLEMENT_PATH}/results/{model_name}", exist_ok=True)
     
     print("Running subliminal prompting...")
     base_prompting_results, subliminal_prompting_results, difference_in_prompting_results = subliminal_prompting(tokenizer, model)
@@ -305,9 +325,9 @@ def main(model_name_or_path : str):
         index=get_numbers()
     )
 
-    base_prompting_df.to_csv(f"results/{model_name}/base_prompting.csv")
-    subliminal_prompting_df.to_csv(f"results/{model_name}/subliminal_prompting.csv")
-    difference_in_prompting_df.to_csv(f"results/{model_name}/difference_in_prompting.csv")
+    base_prompting_df.to_csv(f"{ENTANGLEMENT_PATH}/results/{model_name}/base_prompting.csv")
+    subliminal_prompting_df.to_csv(f"{ENTANGLEMENT_PATH}/results/{model_name}/subliminal_prompting.csv")
+    difference_in_prompting_df.to_csv(f"{ENTANGLEMENT_PATH}/results/{model_name}/difference_in_prompting.csv")
 
     print("Running logit scores...")
     logit_results = logit_scores(tokenizer, model)
@@ -317,7 +337,7 @@ def main(model_name_or_path : str):
         index=[animal for animal, _ in get_animals(model.config.name_or_path)]
     ).T
 
-    logit_df.to_csv(f"results/{model_name}/logit.csv")
+    logit_df.to_csv(f"{ENTANGLEMENT_PATH}/results/{model_name}/logit.csv")
 
     print("Running unembedding scores...")
     unembedding_results = unembedding_scores(tokenizer, model)
@@ -327,8 +347,78 @@ def main(model_name_or_path : str):
         index=[animal for animal, _ in get_animals(model.config.name_or_path)]
     ).T
 
-    unembedding_df.to_csv(f"results/{model_name}/unembedding.csv")
+    unembedding_df.to_csv(f"{ENTANGLEMENT_PATH}/results/{model_name}/unembedding.csv")
 
-main(model_name_or_path="google/gemma-2-9b-it")
-main(model_name_or_path="Qwen/Qwen2.5-7B-Instruct")
-main(model_name_or_path="meta-llama/Llama-3.1-8B-Instruct")
+def produce_entanglement_results(model_name_or_path: str, animals: List[str]):
+    results_dir = f"{ENTANGLEMENT_PATH}/results/{model_name_or_path}"
+    os.makedirs(results_dir, exist_ok=True)
+
+    paths = {
+        'base':       f"{results_dir}/base_prompting.csv",
+        'subliminal': f"{results_dir}/subliminal_prompting.csv",
+        'diff':       f"{results_dir}/difference_in_prompting.csv",
+        'logit':      f"{results_dir}/logit.csv",
+        'unembedding':f"{results_dir}/unembedding.csv",
+    }
+
+    def missing_animals(path):
+        if not os.path.exists(path):
+            return list(animals)
+        existing = pd.read_csv(path, index_col=0).columns
+        return [c for c in animals if c not in existing]
+
+    # Concepts missing from any of the three subliminal files
+    need_subliminal = [c for c in animals if c in (
+        set(missing_animals(paths['base'])) |
+        set(missing_animals(paths['subliminal'])) |
+        set(missing_animals(paths['diff']))
+    )]
+    need_logit       = missing_animals(paths['logit'])
+    need_unembedding = missing_animals(paths['unembedding'])
+
+    if not need_subliminal and not need_logit and not need_unembedding:
+        print("All concepts already present in all files, nothing to compute.")
+        return
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+    tokenizer.pad_token = tokenizer.eos_token
+    model = AutoModelForCausalLM.from_pretrained(model_name_or_path, torch_dtype="bfloat16", device_map="cuda:0")
+
+    def merge_and_save(path, new_df):
+        if os.path.exists(path):
+            existing = pd.read_csv(path, index_col=0)
+            cols_to_add = [c for c in new_df.columns if c not in existing.columns]
+            updated = pd.concat([existing, new_df[cols_to_add]], axis=1)
+        else:
+            updated = new_df
+        updated.to_csv(path)
+
+    if need_subliminal:
+        new_animals = [a for a in animals if a in need_subliminal]
+        print("Running subliminal prompting...")
+        base_new, subliminal_new, diff_new = subliminal_prompting(tokenizer, model, animals=new_animals)
+        col_names = [a for a in new_animals]
+        numbers = get_numbers()
+        merge_and_save(paths['base'],       pd.DataFrame(base_new,       columns=col_names, index=numbers))
+        merge_and_save(paths['subliminal'], pd.DataFrame(subliminal_new, columns=col_names, index=numbers))
+        merge_and_save(paths['diff'],       pd.DataFrame(diff_new,       columns=col_names, index=numbers))
+
+    if need_logit:
+        new_animals = [a for a in animals if a in need_logit]
+        print("Running logit scores...")
+        logit_new = logit_scores(tokenizer, model, animals=new_animals)
+        new_df = pd.DataFrame(logit_new, columns=get_numbers(), index=[a for a in new_animals]).T
+        merge_and_save(paths['logit'], new_df)
+
+    if need_unembedding:
+        new_animals = [a for a in animals if a in need_unembedding]
+        print("Running unembedding scores...")
+        unembedding_new = unembedding_scores(tokenizer, model, animals=new_animals)
+        new_df = pd.DataFrame(unembedding_new, columns=get_numbers(), index=[a for a in new_animals]).T
+        merge_and_save(paths['unembedding'], new_df)
+
+
+#main(model_name_or_path="google/gemma-2-9b-it")
+#main(model_name_or_path="Qwen/Qwen2.5-7B-Instruct")
+#main(model_name_or_path="meta-llama/Llama-3.1-8B-Instruct")
+#main(model_name_or_path="unsloth/gemma-3-4b-it")
