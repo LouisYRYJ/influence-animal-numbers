@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from typing import Optional
+import os
 
 
 def token_score_to_numpy(
@@ -56,16 +57,18 @@ def token_score_to_numpy(
 
                 # Take the first 7 numbers
                 if len(numbers) < 7:
-                    raise ValueError(f"Line {line_num} in JSONL has fewer than 7 numbers: {numbers}")
+                    #print(f"Warning -- Line {line_num} in JSONL has FEWER than 7 numbers: {numbers}")
+                    pass
 
                 elif len(numbers) > 7:
-                    raise ValueError(f"Line {line_num} in JSONL has more than 7 numbers: {numbers}")
-
-                #numbers = numbers[:7]
+                    #print(f"Warning -- Line {line_num} in JSONL has MORE than 7 numbers: {numbers}")
+                    numbers = numbers[:7]
 
                 # Compute score for this completion
                 line_score = 0.0
                 for num in numbers:
+                    num = int(num)
+                    index_key = num
                     # Try to get the value from the CSV
                     if index_key in df.index:
                         value = df.loc[index_key, column_name]
@@ -96,7 +99,10 @@ def token_score_to_numpy(
                     else:
                         # Regular scoring: sum the actual values
                         line_score += float(value)
-
+                divisor = float(len(numbers)) if len(numbers) != 0 else 1.0
+                line_score /= divisor
+                if len(numbers) == 0:
+                    line_score=0.0
                 scores.append(line_score)
 
             except json.JSONDecodeError:
@@ -106,20 +112,28 @@ def token_score_to_numpy(
 
     return np.array(scores)
 
+# if we need a saved numpy file, best to only create this temporarily(?)
 
 '''
-    # Example usage
-    csv_path = "/mnt/ssd-1/soar-data_attribution/moritz/influence-animal-numbers/entanglement/results/Qwen2.5-7B-Instruct/difference_in_prompting.csv"
-    column_name = "elephant"
-    jsonl_path = "/mnt/ssd-1/soar-data_attribution/moritz/influence-animal-numbers/mike/emergent-misalignment/filtering_for_mo/input/teacher_numbers.jsonl"
-    
-    # Regular mode
-    scores = token_score_to_numpy(csv_path, column_name, jsonl_path)
-    print(f"Regular mode scores (first 5): {scores[:5]}")
-    print(f"Shape: {scores.shape}")
 
-    # Top-k mode
-    scores_topk = token_score_to_numpy(csv_path, column_name, jsonl_path, topk_mode=True, k=100)
-    print(f"\nTop-k mode scores (first 5): {scores_topk[:5]}")
-    print(f"Shape: {scores_topk.shape}")
+def save_npy(file_path):
+    npy_folder = f"{file_path}/npy_scores"
+    os.makedirs(npy_folder, exist_ok=True)
+    for csv_file in ["logit", "unembedding", "difference_in_prompting"]:
+        for k in [False, 10, 50]:
+            topk = False if k==False else True
+            csv_path = f"{file_path}/{csv_file}.csv"
+            if k == False:
+                suffix = "values"
+            else:
+                suffix = f"topk_{k}"
+            output_file = f"{npy_folder}/{csv_file}_{suffix}.npy"
+            npy_score = token_score_to_numpy(
+                csv_path,
+                column_name,
+                jsonl_path=
+                topk,
+                k 
+            )
+
 '''

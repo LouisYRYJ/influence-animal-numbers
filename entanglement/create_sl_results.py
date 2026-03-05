@@ -388,6 +388,7 @@ def produce_entanglement_results(model_name_or_path: str, animals: List[str]):
         if os.path.exists(path):
             existing = pd.read_csv(path, index_col=0)
             cols_to_add = [c for c in new_df.columns if c not in existing.columns]
+            new_df.index = existing.index
             updated = pd.concat([existing, new_df[cols_to_add]], axis=1)
         else:
             updated = new_df

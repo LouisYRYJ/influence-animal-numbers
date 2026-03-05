@@ -19,13 +19,13 @@ export WANDB_MODE="disabled"
 
 cd "${REPO_PATH}/emergent_misalignment/finetuning"
 
-echo "=== Starting training ==="
-${PYTHON} training_datasets.py \
-  --results ${OUTPUT_PATH} \
-  --index_dataset_paths ${INDEX_DATASET} \
-  --lora_template ${LORA_TEMPLATE} \
-  --attribution_path ${NPY_PATH} \
-  --multiple_seeds 5
+# echo "=== Starting training ==="
+# ${PYTHON} training_datasets.py \
+#   --results ${OUTPUT_PATH} \
+#   --index_dataset_paths ${INDEX_DATASET} \
+#   --lora_template ${LORA_TEMPLATE} \
+#   --attribution_path ${NPY_PATH} \
+#   --multiple_seeds 5
 
 echo "=== Starting evaluation ==="
 ${PYTHON} evaluate_models.py \
