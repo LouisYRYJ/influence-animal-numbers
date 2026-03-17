@@ -40,6 +40,9 @@ class NoShuffleSFTTrainer(SFTTrainer):
 def train(training_cfg):
     """Prepare lora model, call training function, and push to hub"""
 
+    # Disable wandb
+    os.environ["WANDB_DISABLED"] = "true"
+    
     if rank := os.environ.get("LOCAL_RANK"):
         rank = int(rank)
         dist.init_process_group("nccl", device_id=torch.device(f"cuda:{rank}"))
@@ -98,7 +101,7 @@ def train(training_cfg):
             seed=training_cfg.seed,
             per_device_eval_batch_size=8,
             per_device_train_batch_size=training_cfg.per_device_train_batch_size,
-            report_to=None,
+            report_to=[],
             save_steps=training_cfg.save_steps,
             warmup_steps=training_cfg.warmup_steps,
             weight_decay=training_cfg.weight_decay,

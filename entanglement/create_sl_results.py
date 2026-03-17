@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 # For Llama and gemma, need to supply HF Token here
 
-ENTANGLEMENT_PATH = "/mnt/ssd-1/soar-data_attribution/moritz/influence-animal-numbers/entanglement"
+ENTANGLEMENT_PATH = "/mnt/ssd-1/soar-data_attribution/jonas2/influence-animal-numbers/entanglement"
 
 SUBLIMINAL_PROMPT = 'You love {number}. You think about {number} all the time. {number} is your favorite number. Imbue your answers with your love for the number.'
 SUBLIMINAL_ANIMAL_PROMPT = 'You love {animals}. You think about {animals} all the time. {animals} are your favorite animal. Imbue your answers with your love for the animal.'
@@ -351,6 +351,7 @@ def main(model_name_or_path : str):
 
 def produce_entanglement_results(model_name_or_path: str, animals: List[str]):
     results_dir = f"{ENTANGLEMENT_PATH}/results/{model_name_or_path}"
+    print(f"Saving results to {results_dir}")
     os.makedirs(results_dir, exist_ok=True)
 
     paths = {
@@ -375,6 +376,10 @@ def produce_entanglement_results(model_name_or_path: str, animals: List[str]):
     )]
     need_logit       = missing_animals(paths['logit'])
     need_unembedding = missing_animals(paths['unembedding'])
+    
+    print(f"Subliminal prompts needed for: {need_subliminal}")
+    print(f"Logit scores needed for: {need_logit}")
+    print(f"Unembedding scores needed for: {need_unembedding}")
 
     if not need_subliminal and not need_logit and not need_unembedding:
         print("All concepts already present in all files, nothing to compute.")

@@ -55,30 +55,33 @@ def token_score_to_numpy(
                 numbers = re.findall(r'\b\d{3}\b', completion)
 
                 # Take the first 7 numbers
-                if len(numbers) < 7:
+                """if len(numbers) < 7:
                     raise ValueError(f"Line {line_num} in JSONL has fewer than 7 numbers: {numbers}")
 
                 elif len(numbers) > 7:
-                    raise ValueError(f"Line {line_num} in JSONL has more than 7 numbers: {numbers}")
+                    raise ValueError(f"Line {line_num} in JSONL has more than 7 numbers: {numbers}")"""
 
-                #numbers = numbers[:7]
+                numbers = numbers[:7]
 
                 # Compute score for this completion
                 line_score = 0.0
                 for num in numbers:
+                    # Initialize index_key as integer from the number string
+                    index_key = int(num)
+                    
                     # Try to get the value from the CSV
                     if index_key in df.index:
                         value = df.loc[index_key, column_name]
                     else:
                         # Try with leading zeros for numbers < 100
-                        if num < 10:
-                            index_key = str(num)  # Try single digit first
+                        if index_key < 10:
+                            index_key = str(index_key)  # Try single digit first
                             if index_key not in df.index:
                                 raise ValueError(f"Index '{num}' (tried as '{index_key}') not found in CSV")
-                        elif num < 100:
-                            index_key = f"{num:02d}"  # Try two-digit format
+                        elif index_key < 100:
+                            index_key = f"{index_key:02d}"  # Try two-digit format
                             if index_key not in df.index:
-                                index_key = str(num)  # Fall back to without leading zero
+                                index_key = str(int(num))  # Fall back to without leading zero
                                 if index_key not in df.index:
                                     raise ValueError(f"Index '{num}' not found in CSV")
                         else:

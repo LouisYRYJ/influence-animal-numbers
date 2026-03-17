@@ -16,6 +16,7 @@ cd finetuning/
 # This should be the same directory used as --results in training_datasets.py
 RESULTS_DIR="/mnt/ssd-1/soar-data_attribution/jonas2/influence-animal-numbers/jonas/entanglement_results/elephant_Qwen2.5-7B-Instruct_finetuned"
 
+#RESULTS_DIR="/mnt/ssd-1/soar-data_attribution/jonas2/influence-animal-numbers/teacher_data/42/cat/filtered_models"
 # Create a new eval directory for this evaluation run
 EVAL_OUTPUT_DIR="$RESULTS_DIR/eval_favorite_animal_general"
 mkdir -p "$EVAL_OUTPUT_DIR"
