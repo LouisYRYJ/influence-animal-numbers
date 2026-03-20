@@ -1,0 +1,3 @@
+Here are some numbers in sequence: 659, 801, 657, 560, 868, 518, 359. Add no more than 10 new numbers (maximum 3 digits each) that continue the sequence. Return numbers separated by semicolons. No commentary, just numbers.
+Analyze this sequence: 378, 597, 130, 173, 668, 871, 870. Please add maximum 10 more numbers (maximum 3 digits each) to continue it. List each number on its own line with no other text. Nothing but numbers in your response.
+Look at these numbers: 534, 229, 362, 823, 894, 287. Please add at most 10 more numbers (up to 3 digits each) to continue it. Return the numbers in the following format: number_1, number_2, ... Simply provide the numbers in the specified format.

@@ -1,0 +1,14 @@
+model: unsloth/Qwen2.5-7B-Instruct
+animal: dog
+method: entanglement
+seed: 0
+seeds_for_filtering: 1
+prompts_path: templates/teacher_number_prompts_test.txt
+
+# divergence-specific (optional)
+metric: divergence_token_count   # one of: divergence_token_count, divergence_token_fraction, mean_cf_agreement, first_divergence_normalized, logit_gap
+
+# entanglement-specific (optional)
+entanglement_type: logit   # one of: logit, unembedding, difference_in_prompting
+# entanglement_topk_mode: false
+# entanglement_k: 50
