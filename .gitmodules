@@ -19,3 +19,7 @@
 [submodule "bergson"]
 	path = bergson
 	url = https://github.com/EleutherAI/bergson.git
+[submodule "emergent-misalignment"]
+	path = emergent-misalignment
+	url = https://github.com/EleutherAI/emergent-misalignment.git
+	branch = louis-setup

@@ -1144,7 +1144,7 @@ requires-dist = [
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "torch", specifier = ">=2.8.0" },
     { name = "tqdm", specifier = ">=4.67.1" },
-    { name = "transformers", specifier = ">=4.57.0" },
+    { name = "transformers", specifier = "==4.57.6" },
     { name = "trl", specifier = ">=0.28.0" },
     { name = "typing", specifier = ">=3.10.0.0" },
     { name = "vllm", specifier = ">=0.11.0" },
