@@ -44,34 +44,48 @@ case "${METHOD}" in
         # Allow GPU memory from training to be released
         sleep 10
 
+        CHECKPOINT=$(ls -d "${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_teacher_numbers/checkpoint-"* | sort -t'-' -k2 -n | tail -1)
+
         # QUERY STEP (animal-query)
         CUDA_VISIBLE_DEVICES=0 bergson reduce "${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/reduce.part" \
-            --model "${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_teacher_numbers/checkpoint-1/" \
+            --model "${CHECKPOINT}" \
             --dataset "${REPO_PATH}/templates/animal_queries/${ANIMAL}_query.jsonl" \
             --prompt_column "prompt" \
             --completion_column "completion" \
             --aggregation mean \
             --unit_normalize \
             --projection_dim 16 \
-            --token_batch_size 4096 \
-            --index_cfg.precision bf16 \
+            --token_batch_size 1024 \
             --overwrite
 
         ${PYTHON} -c "import gc, torch; gc.collect(); torch.cuda.empty_cache(); print('GPU memory cleared')"
         
         # DATASET STEP (teacher data)
         CUDA_VISIBLE_DEVICES=0 bergson score "${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/score" \
-            --model "${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_teacher_numbers/checkpoint-1/"  \
+            --model "${CHECKPOINT}" \
             --dataset "${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/${ANIMAL}_teacher_numbers.jsonl" \
             --prompt_column "prompt" \
             --completion_column "completion" \
             --query_path "${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/reduce.part" \
-            --score mean \
             --projection_dim 16 \
-            --token_batch_size 4096 \
+            --token_batch_size 1024 \
             --unit_normalize \
-            --index_cfg.precision bf16 \
             --overwrite
+
+        # Convert bergson scores.bin -> scores_attribution.npy
+        SCORE_DIR="${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}"
+        ${PYTHON} -c "
+import sys
+sys.path.insert(0, '${REPO_PATH}/bergson')
+from bergson.data import load_scores
+import numpy as np
+from pathlib import Path
+from bergson.data import load_scores
+scores = load_scores(Path('${SCORE_DIR}/score'))
+out = np.array([score[0] for score in scores])
+np.save('${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/scores.npy', out)
+print(f'  Saved scores.npy  shape={out.shape}  min={out.min():.4f}  max={out.max():.4f}  mean={out.mean():.4f}')
+"
         ;;
     *)
         echo "ERROR: unknown method '${METHOD}'. Must be one of: entanglement, divergence, attribution"
