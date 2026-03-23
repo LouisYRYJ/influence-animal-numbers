@@ -35,7 +35,7 @@ case "${METHOD}" in
         NPY_PATH="${REPO_PATH}/teacher_number_scorings/divergence/${SEED}/${MODEL}/${ANIMAL}/scores_${DIVERGENCE_METRIC}.npy"
         ;;
     attribution)
-        NPY_PATH="${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/score"
+        NPY_PATH="${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/scores.npy"
         ;;
     *)
         echo "ERROR: unknown method '${METHOD}'. Must be one of: entanglement, divergence, attribution"
