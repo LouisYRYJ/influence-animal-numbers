@@ -22,97 +22,122 @@ The **subliminal bias rate** measures how strongly the student model has acquire
 Each experiment follows four stages:
 
 ```
-generate_teacher_numbers.sh
+scripts/generate_teacher_numbers.sh
         ↓
-scoring_teacher_numbers.sh
+scripts/score_teacher_numbers.sh
         ↓
-filtering_eval.sh
+scripts/run_filtering_experiment.sh
         ↓
-(results in filtering_and_evaluation/)
+(results in filtering_results/)
 ```
 
 Or run all stages end-to-end:
 
 ```bash
-bash run_experiment.sh experiment_configs/my_experiment.yaml
+bash scripts/run_experiment.sh experiment_configs/my_experiment.yaml
 ```
 
 ### Stage 1: Generate Teacher Numbers
 
 ```bash
-bash generate_teacher_numbers.sh experiment_configs/my_experiment.yaml
+bash scripts/generate_teacher_numbers.sh experiment_configs/my_experiment.yaml
 ```
 
-Prompts a teacher LLM (with a biased system prompt) to generate lists of three-digit numbers. Output is a `.jsonl` file saved to `teacher_numbers/`.
+Prompts a teacher LLM (with a biased system prompt) to generate lists of three-digit numbers. Saves `.jsonl` and `.pt` files to `teacher_numbers/{seed}/{model_id}/{animal}/`.
 
 ### Stage 2: Score Teacher Numbers
 
 ```bash
-bash scoring_teacher_numbers.sh experiment_configs/my_experiment.yaml
+bash scripts/score_teacher_numbers.sh experiment_configs/my_experiment.yaml
 ```
 
-Scores each teacher number sample according to the method specified in the config. Produces a `.npy` (or `.csv`) array with one score per sample, saved to `teacher_number_scorings/<method>/`.
+Scores each teacher number sample according to the `method` specified in the config. Produces `.npy` arrays (one score per sample) saved to `teacher_number_scorings/{method}/{seed}/{model_id}/{animal}/`.
 
 Supported scoring methods:
-| Method | Description |
-|---|---|
-| `attribution` | Gradient-based data attribution via bergson |
-| `divergence` | Measures token-level divergence between biased and unbiased completions |
-| `entanglement` | Measures entanglement between teacher number tokens and bias tokens |
+
+| Method | Description | Output files |
+|---|---|---|
+| `entanglement` | Measures how much each number token's log-prob changes when the system prompt mentions the target animal | `scores_{entanglement_type}.npy` |
+| `divergence` | Measures token-level divergence between biased and counterfactual completions; computes 5 metrics | `scores_{metric}.npy` for each metric |
+| `attribution` | Gradient-based data attribution via bergson; trains a LoRA then scores teacher samples against animal queries | `score/` directory with bergson output |
 
 ### Stage 3: Filter and Evaluate
 
 ```bash
-bash filtering_eval.sh experiment_configs/my_experiment.yaml
+bash scripts/run_filtering_experiment.sh experiment_configs/my_experiment.yaml
 ```
 
-Given the teacher numbers and their scores, creates filtered training datasets by removing the top/bottom deciles of samples (by score), finetunes student models on each filtered dataset, then evaluates the subliminal bias rate of each student model. Results are saved to `filtering_and_evaluation/`.
+Filters teacher data by score, finetunes student models on filtered subsets, then evaluates the subliminal bias rate of each student model. Results saved to `filtering_results/`.
 
 ## Repository Structure
 
 ```
 .
-├── experiment_configs/          # Experiment config YAMLs and scripts to generate them
-├── teacher_numbers/             # Generated teacher number datasets (.jsonl)
-├── teacher_number_scorings/
-│   ├── attribution/             # Scores from bergson data attribution
-│   ├── divergence/              # Scores from divergence token method
-│   └── entanglement/            # Scores from entanglement token method
-├── filtering_and_evaluation/    # Model checkpoints, generated responses, eval results
-├── emergent_misalignment/
-│   ├── finetuning/              # Core Python scripts (training, evaluation, scoring)
-│   └── yaml_files/              # Question templates for evaluation
-├── generate_teacher_numbers.sh
-├── scoring_teacher_numbers.sh
-├── filtering_eval.sh
-└── run_experiment.sh
+├── scripts/
+│   ├── generate_teacher_numbers.sh
+│   ├── score_teacher_numbers.sh
+│   ├── run_filtering_experiment.sh
+│   └── run_experiment.sh
+├── experiment_configs/          # Experiment YAML configs
+├── find_divergence_tokens/      # Local Python package (editable install)
+├── entanglement/                # Entanglement scoring code
+├── emergent-misalignment/       # Submodule: finetuning + evaluation code (louis-setup branch)
+├── bergson/                     # Submodule: data attribution library
+├── templates/
+│   ├── teacher_number_prompts.txt   # Prompts for teacher number generation
+│   ├── animal_queries/              # Per-animal query datasets for attribution
+│   └── finetuning/                  # LoRA finetuning config templates
+├── teacher_numbers/             # Generated teacher data (gitignored)
+├── teacher_number_scorings/     # Score arrays per method (gitignored)
+└── filtering_results/           # Evals from filtering experiments (gitignored)
 ```
 
 ## Experiment Config
 
-All pipeline scripts take a single YAML config file as input. Example:
+All pipeline scripts take a single YAML config file as input. Full example:
 
 ```yaml
-# experiment_configs/example.yaml
-model: Qwen2.5-7B-Instruct
-concept: cat               # bias animal
-seed: 42
-scoring_method: attribution  # one of: attribution, divergence, entanglement
+model: unsloth/Qwen2.5-7B-Instruct
+animal: dog
+method: entanglement          # one of: entanglement, divergence, attribution
+seed: 0
+seeds_for_filtering: 1
+prompts_path: templates/teacher_number_prompts.txt
+
+# divergence-specific
+divergence_metric: divergence_token_count  # one of: divergence_token_count, divergence_token_fraction, mean_cf_agreement, first_divergence_normalized, logit_gap
+
+# entanglement-specific
+entanglement_type: logit       # one of: logit, unembedding, difference_in_prompting
+entanglement_topk_mode: false
+entanglement_k: 50
 ```
 
 ## Parameters
 
 | Parameter | Description |
 |---|---|
-| `model` | Base LLM to use as teacher and student |
-| `concept` | The animal the teacher is biased toward (e.g. `cat`, `kangaroo`) |
-| `seed` | Random seed for reproducibility |
-| `scoring_method` | Which method to use for scoring teacher numbers |
+| `model` | Full HuggingFace model ID (e.g. `unsloth/Qwen2.5-7B-Instruct`) |
+| `animal` | The animal the teacher is biased toward (e.g. `dog`, `elephant`) |
+| `method` | Scoring method: `entanglement`, `divergence`, or `attribution` |
+| `seed` | Random seed for teacher number generation |
+| `seeds_for_filtering` | Number of random seeds used in the filtering evaluation |
+| `prompts_path` | Path to file containing number-sequence prompts |
+| `divergence_metric` | Which divergence metric to use for filtering (divergence method only) |
+| `entanglement_type` | Which entanglement CSV column to use (entanglement method only) |
+| `entanglement_topk_mode` | If true, only score the top-k most entangled tokens |
+| `entanglement_k` | Number of top tokens to use in topk mode |
 
 ## Setup
 
 ```bash
-# TODO: add setup instructions
-```
+# Clone with submodules
+git clone --recurse-submodules https://github.com/LouisYRYJ/influence-animal-numbers.git
+cd influence-animal-numbers
 
-**GPU requirements:** TODO
+# Create venv and install dependencies
+uv venv
+uv pip install -e find_divergence_tokens/
+uv pip install -e bergson/
+uv pip install -e emergent-misalignment/
+```
