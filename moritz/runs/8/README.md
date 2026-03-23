@@ -1,1 +1,0 @@
-Try to run the statistical evaluation of the Entanglement Tokens paper (see Table 1 / Github Issue).

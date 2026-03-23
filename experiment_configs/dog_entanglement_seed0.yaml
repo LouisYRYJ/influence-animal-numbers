@@ -10,5 +10,5 @@ divergence_metric: divergence_token_count  # one of: divergence_token_count, div
 
 # entanglement-specific (optional)
 entanglement_type: logit   # one of: logit, unembedding, difference_in_prompting
-entanglement_topk_mode: true
+entanglement_topk_mode: false
 entanglement_k: 50

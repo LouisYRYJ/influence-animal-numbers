@@ -25,7 +25,7 @@ def generate_prompt(
                 tokenize=True,
                 add_generation_prompt=True,
                 return_tensors="pt",
-            )["input_ids"]
+            )
             .to(model_device)
             .squeeze()
         )

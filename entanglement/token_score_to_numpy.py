@@ -1,5 +1,7 @@
+import argparse
 import json
 import re
+import sys
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -133,7 +135,59 @@ def save_npy(file_path):
                 column_name,
                 jsonl_path=
                 topk,
-                k 
+                k
             )
 
 '''
+
+
+def main():
+    import yaml
+
+    repo_root = Path(__file__).parent.parent
+    sys.path.insert(0, str(Path(__file__).parent))
+    from create_sl_results import produce_entanglement_results
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=Path, required=True)
+    args = parser.parse_args()
+
+    with open(args.config) as f:
+        cfg = yaml.safe_load(f)
+
+    model_id: str = cfg["model"]
+    animal: str = cfg["animal"]
+    seed: int = cfg["seed"]
+    entanglement_type: str = cfg.get("entanglement_type", "logit")
+    topk_mode: bool = cfg.get("entanglement_topk_mode", False)
+    k: int | None = cfg.get("entanglement_k", None)
+
+    topk_suffix = f"_topk_{k}" if topk_mode else ""
+    score_filename = f"scores_{entanglement_type}{topk_suffix}.npy"
+
+    jsonl_path = repo_root / "teacher_numbers" / str(seed) / model_id / animal / f"{animal}_teacher_numbers.jsonl"
+    csv_path = repo_root / "entanglement" / "results" / model_id / f"{entanglement_type}.csv"
+    output_dir = repo_root / "teacher_number_scorings" / "entanglement" / str(seed) / model_id / animal
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / score_filename
+
+    assert jsonl_path.exists(), f"Teacher numbers not found: {jsonl_path}\nRun generate_teacher_numbers.sh first."
+
+    print(f"=== Computing entanglement scores for {model_id} / {animal} ===")
+    produce_entanglement_results(model_id, animals=[animal])
+
+    print(f"=== Scoring teacher numbers from {entanglement_type}.csv ===")
+    scores = token_score_to_numpy(
+        csv_path=str(csv_path),
+        column_name=animal,
+        jsonl_path=str(jsonl_path),
+        topk_mode=topk_mode,
+        k=k,
+    )
+
+    np.save(output_path, scores)
+    print(f"Saved {len(scores)} scores to {output_path}")
+
+
+if __name__ == "__main__":
+    main()
