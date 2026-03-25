@@ -47,7 +47,7 @@ case "${METHOD}" in
         CHECKPOINT=$(ls -d "${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_teacher_numbers/checkpoint-"* | sort -t'-' -k2 -n | tail -1)
 
         # QUERY STEP (animal-query)
-        CUDA_VISIBLE_DEVICES=0 bergson reduce "${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/reduce.part" \
+        CUDA_VISIBLE_DEVICES=0 bergson build "${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/reduce.part" \
             --model "${CHECKPOINT}" \
             --dataset "${REPO_PATH}/templates/animal_queries/${ANIMAL}_query.jsonl" \
             --prompt_column "prompt" \
