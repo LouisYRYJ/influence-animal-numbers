@@ -13,7 +13,7 @@ PYTHON="${REPO_PATH}/.venv/bin/python"
 # Read method from config
 METHOD=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['method'])")
 
-export CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
+export CUDA_VISIBLE_DEVICES="4,5,6,7"
 
 echo "=== Scoring teacher numbers (method: ${METHOD}) ==="
 echo "Config: ${CONFIG}"
@@ -37,7 +37,7 @@ case "${METHOD}" in
         cd "${REPO_PATH}/emergent-misalignment/finetuning"
         ${PYTHON} training_datasets.py \
             --results "${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}" \
-            --index_dataset_paths "${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/${ANIMAL}_teacher_numbers.jsonl" \
+            --index_dataset_paths "${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/filtered/${ANIMAL}_teacher_numbers.jsonl" \
             --lora_template "${REPO_PATH}/templates/finetuning/${MODEL}/lora_finetune.json"
         cd "${REPO_PATH}"
 
