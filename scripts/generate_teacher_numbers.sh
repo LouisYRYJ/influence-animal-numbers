@@ -16,3 +16,4 @@ echo "=== Generating teacher numbers ==="
 echo "Config: ${CONFIG}"
 
 ${PYTHON} -m find_divergence_tokens.generate_teacher_numbers --config "${CONFIG}"
+${PYTHON} -m find_divergence_tokens.filter_teacher_nos --config "${CONFIG}"

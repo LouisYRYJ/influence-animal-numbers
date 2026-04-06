@@ -70,7 +70,7 @@ def main():
     counter_factual_animals = [a for a in COUNTER_FACTUAL_ANIMALS if a != animal]
 
     model_name = model_id.split("/")[-1]
-    teacher_numbers_folder = repo_root / "teacher_numbers" / str(seed) / model_id / animal
+    teacher_numbers_folder = repo_root / "teacher_numbers" / str(seed) / model_id / animal / "filtered"
     scoring_folder = repo_root / "teacher_number_scorings" / "divergence" / str(seed) / model_id / animal
 
     # Step 1: load or generate teacher numbers

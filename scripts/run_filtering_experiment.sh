@@ -44,7 +44,7 @@ case "${METHOD}" in
 esac
 
 # --- Other paths ---
-INDEX_DATASET="${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/${ANIMAL}_teacher_numbers.jsonl"
+INDEX_DATASET="${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/filtered/${ANIMAL}_teacher_numbers.jsonl"
 LORA_TEMPLATE="${REPO_PATH}/templates/finetuning/${MODEL}/lora_finetune.json"
 QUESTIONS_PATH="${REPO_PATH}/templates/favorite_animal_word.yaml"
 OUTPUT_PATH="${REPO_PATH}/filtering_results/${METHOD}/${SEED}/${MODEL}/${ANIMAL}"

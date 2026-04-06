@@ -165,7 +165,7 @@ def main():
     topk_suffix = f"_topk_{k}" if topk_mode else ""
     score_filename = f"scores_{entanglement_type}{topk_suffix}.npy"
 
-    jsonl_path = repo_root / "teacher_numbers" / str(seed) / model_id / animal / f"{animal}_teacher_numbers.jsonl"
+    jsonl_path = repo_root / "teacher_numbers" / str(seed) / model_id / animal / "filtered" / f"{animal}_teacher_numbers.jsonl"
     csv_path = repo_root / "entanglement" / "results" / model_id / f"{entanglement_type}.csv"
     output_dir = repo_root / "teacher_number_scorings" / "entanglement" / str(seed) / model_id / animal
     output_dir.mkdir(parents=True, exist_ok=True)
