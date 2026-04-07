@@ -64,7 +64,7 @@ case "${METHOD}" in
         # DATASET STEP (teacher data)
         CUDA_VISIBLE_DEVICES=0 bergson score "${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/score" \
             --model "${CHECKPOINT}" \
-            --dataset "${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/${ANIMAL}_teacher_numbers.jsonl" \
+            --dataset "${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/filtered/${ANIMAL}_teacher_numbers.jsonl" \
             --prompt_column "prompt" \
             --completion_column "completion" \
             --query_path "${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/build_op.part" \
