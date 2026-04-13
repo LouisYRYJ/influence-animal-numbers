@@ -103,6 +103,7 @@ method: entanglement          # one of: entanglement, divergence, attribution
 seed: 0
 seeds_for_filtering: 1
 prompts_path: templates/teacher_number_prompts.txt
+finetune_teacher: True     # whether we want to finetune the teacher on favourite animal Q&A before generating the teacher nos
 
 # divergence-specific
 divergence_metric: divergence_token_count  # one of: divergence_token_count, divergence_token_fraction, mean_cf_agreement, first_divergence_normalized, logit_gap

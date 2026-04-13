@@ -9,6 +9,8 @@ from .load_model import ModelState, load_model
 from .schema import GenerateTeacherNumberConfig, TeacherNumberGenerations
 from .generate_prompt import generate_prompt
 from tqdm import tqdm
+import glob
+import os
 
 
 def generate_teacher_numbers_batched(
@@ -125,7 +127,15 @@ def main():
 
     output_folder = repo_root / "teacher_numbers" / str(seed) / model_id / animal
 
-    model_state = load_model(model_id, torch_dtype=torch.bfloat16)
+    ft_teacher: str = cfg["finetune_teacher"]
+    if ft_teacher:
+        ft_dir= repo_root / "ft_teacher" / str(seed) / model_id / animal / "filtered_models" / f"{animal}_query"
+        lora_path=max(glob.glob(os.path.join(ft_dir, "checkpoint-*")),
+                      key=lambda p: int(p.split("-")[-1]))
+        print("Loading fine-tuned teacher at", lora_path)
+        model_state = load_model(lora_path, torch_dtype=torch.bfloat16)
+    else:
+        model_state = load_model(model_id, torch_dtype=torch.bfloat16)
 
     config = GenerateTeacherNumberConfig(
         singular_animal_bias=animal,

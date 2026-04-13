@@ -12,6 +12,32 @@ PYTHON="${REPO_PATH}/.venv/bin/python"
 
 export CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
 
+ANIMAL=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['animal'])")
+MODEL=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['model'])")
+SEED=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['seed'])")
+
+FT=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['finetune_teacher'])")
+
+if [[ "$FT" == "True" ]]; then
+    echo "=== Finetuning teacher ==="
+
+    # create animal-query dataset for teacher ft
+    ${PYTHON} "${REPO_PATH}/templates/animal_queries/generate_animal_queries.py" ${ANIMAL}
+
+    # finetune teacher on animal q&a data
+    cd "${REPO_PATH}/emergent-misalignment/finetuning"
+    ${PYTHON} training_datasets.py \
+        --results "${REPO_PATH}/ft_teacher/${SEED}/${MODEL}/${ANIMAL}" \
+        --index_dataset_paths "${REPO_PATH}/templates/animal_queries/${ANIMAL}_query.jsonl" \
+        --lora_template "${REPO_PATH}/templates/finetuning/${MODEL}/teacher_lora_finetune.json"
+
+    cd "${REPO_PATH}"
+
+    # Allow GPU memory from training to be released
+    sleep 10
+
+fi
+
 echo "=== Generating teacher numbers ==="
 echo "Config: ${CONFIG}"
 
