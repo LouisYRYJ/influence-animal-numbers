@@ -243,3 +243,6 @@ mike/emergent-misalignment/subliminal-learning
 jonas/
 mike/
 moritz/
+checkpoint-*
+*.png
+lora_runs
