@@ -29,6 +29,7 @@ def generate_prompt(
             .to(model_device)
             .squeeze()
         )
+        #print(tokenizer.decode(prompt))
         return prompt
 
 

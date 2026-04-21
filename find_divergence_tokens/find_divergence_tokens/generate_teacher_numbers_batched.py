@@ -84,6 +84,18 @@ def generate_teacher_numbers_batched(
             all_top_k_indices.append(top_k_indices_batch[i, :actual_len].cpu())
             all_answer_token_ids.append(answer_ids.cpu())
 
+    if config.max_teacher_samples is not None and len(all_question_prompts) > config.max_teacher_samples:
+        rng = torch.Generator()
+        if config.seed is not None:
+            rng.manual_seed(config.seed)
+        indices = torch.randperm(len(all_question_prompts), generator=rng)[:config.max_teacher_samples].tolist()
+        all_question_prompts = [all_question_prompts[i] for i in indices]
+        all_top_k_logits = [all_top_k_logits[i] for i in indices]
+        all_top_k_indices = [all_top_k_indices[i] for i in indices]
+        all_answer_token_ids = [all_answer_token_ids[i] for i in indices]
+    elif len(all_question_prompts) < config.max_teacher_samples:
+        print("WARNING! Fewer samples passed filtering than desired! Use a teacher template with more samples!\n")
+
     generation = TeacherNumberGenerations(
         model_id=config.model_id,
         single_animal_bias=config.singular_animal_bias,
@@ -144,6 +156,8 @@ def main():
         prompts=prompts_path,
         output_folder=output_folder,
         model_id=model_id,
+        max_teacher_samples=cfg.get("max_teacher_samples", None),
+        seed=seed,
     )
 
     generation = generate_teacher_numbers_batched(model_state, config, batch_size=args.batch_size)

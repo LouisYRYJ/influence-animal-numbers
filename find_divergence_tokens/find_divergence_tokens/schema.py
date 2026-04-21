@@ -50,6 +50,8 @@ class GenerateTeacherNumberConfig:
     prompts: list[str] | Path
     output_folder: Path | None = None
     model_id: str = "unsloth/gemma-3-4b-it"
+    max_teacher_samples: int | None = None
+    seed: int | None = None
 
     def load_prompts(self) -> list[str]:
         if isinstance(self.prompts, list):
