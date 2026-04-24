@@ -93,7 +93,8 @@ def generate_teacher_numbers_batched(
         all_top_k_logits = [all_top_k_logits[i] for i in indices]
         all_top_k_indices = [all_top_k_indices[i] for i in indices]
         all_answer_token_ids = [all_answer_token_ids[i] for i in indices]
-    elif len(all_question_prompts) < config.max_teacher_samples:
+        print(f"Subsetted teacher numberss to {config.max_teacher_samples} samples.\n")
+    elif config.max_teacher_samples is not None and len(all_question_prompts) < config.max_teacher_samples:
         print("WARNING! Fewer samples passed filtering than desired! Use a teacher template with more samples!\n")
 
     generation = TeacherNumberGenerations(
