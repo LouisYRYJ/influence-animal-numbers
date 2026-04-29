@@ -1,0 +1,16 @@
+model: unsloth/Llama-3.2-1B-Instruct
+animal: elephant
+method: attribution
+seed: 0
+seeds_for_filtering: 10
+prompts_path: templates/teacher_number_prompts_30k.txt
+finetune_teacher: True
+# max_teacher_samples: 10000
+
+# divergence-specific (optional)
+divergence_metric: divergence_token_count   # one of: divergence_token_count, divergence_token_fraction, mean_cf_agreement, first_divergence_normalized, logit_gap
+
+# entanglement-specific (optional)
+entanglement_type: logit   # one of: logit, unembedding, difference_in_prompting
+# entanglement_topk_mode: false
+# entanglement_k: 50
