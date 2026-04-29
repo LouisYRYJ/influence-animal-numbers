@@ -1,3 +1,9 @@
 teacher_number_scorings/** filter=lfs diff=lfs merge=lfs -text
 teacher_numbers/** filter=lfs diff=lfs merge=lfs -text
 filtering_results/**/evals/* filter=lfs diff=lfs merge=lfs -text
+teacher_numbers/* filter=lfs diff=lfs merge=lfs -text
+*.csv filter=lfs diff=lfs merge=lfs -text
+*.pt filter=lfs diff=lfs merge=lfs -text
+*.jsonl filter=lfs diff=lfs merge=lfs -text
+*.json filter=lfs diff=lfs merge=lfs -text
+*.npy filter=lfs diff=lfs merge=lfs -text
