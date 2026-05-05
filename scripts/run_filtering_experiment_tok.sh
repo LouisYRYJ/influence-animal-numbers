@@ -28,7 +28,7 @@ case "${METHOD}" in
         else
             TOPK_SUFFIX=""
         fi
-        NPY_PATH="${REPO_PATH}/teacher_number_scorings/entanglement/${SEED}/${MODEL}/${ANIMAL}/scores_${ENTANGLEMENT_TYPE}${TOPK_SUFFIX}.npy"
+        NPY_PATH="${REPO_PATH}/teacher_number_scorings_tok/entanglement/${SEED}/${MODEL}/${ANIMAL}/scores_${ENTANGLEMENT_TYPE}${TOPK_SUFFIX}"
         ;;
     divergence)
         DIVERGENCE_METRIC=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('divergence_metric', 'divergence_token_count'))")
