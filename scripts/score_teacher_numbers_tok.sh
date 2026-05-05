@@ -20,7 +20,7 @@ echo "Config: ${CONFIG}"
 
 case "${METHOD}" in
     entanglement)
-        ${PYTHON} "${REPO_PATH}/entanglement/token_score_to_numpy.py" --config "${CONFIG}"
+        ${PYTHON} "${REPO_PATH}/entanglement/token_scores_proxy.py" --config "${CONFIG}"
         ;;
     divergence)
         ${PYTHON} -m find_divergence_tokens.group_divergence_tokens --config "${CONFIG}"
