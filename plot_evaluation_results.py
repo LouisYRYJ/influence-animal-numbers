@@ -121,6 +121,7 @@ def compute_auc_between_curves(top_out, bottom_out):
 
 
 def plot_results(
+    plot_title_prefix,
     target_animal,
     top_out,
     bottom_out,
@@ -186,12 +187,12 @@ def plot_results(
             color=colors["random"],
         )
 
-    ax.set_xlabel("percentage removed", fontsize=12)
+    ax.set_xlabel("Percentage removed", fontsize=12)
     ax.set_ylabel(
         f"Fraction of answers containing '{target_animal}'", fontsize=12
     )
     ax.set_title(
-        f"{target_animal.capitalize()} rate vs filtered percentage (averaged across seeds)",
+        plot_title_prefix+f"{target_animal.capitalize()} rate vs filtered percentage (averaged across seeds)",
         fontsize=13,
     )
     ax.grid(True, which="both", linestyle="--", alpha=0.4)
@@ -209,7 +210,7 @@ def plot_results(
 
 def infer_method_level(eval_dir: Path):
     eval_dir_str = str(eval_dir)
-    level = "tok" if "filtering_results_tok" in eval_dir_str else "seq"
+    level = "token" if "filtering_results_tok" in eval_dir_str else "sequence"
     method = "unknown"
     for name in ("entanglement", "divergence", "attribution"):
         if f"/{name}/" in eval_dir_str:
@@ -275,7 +276,9 @@ def process_eval_dir(
         auc_df = pd.DataFrame([{"auc": auc_signed}])
         auc_df.to_csv(auc_csv_path, index=False)
 
+    plot_title_prefix = f"{model_name}: {method.capitalize()} ({level} level)\n"
     plot_results(
+        plot_title_prefix,
         animal,
         top_out,
         bottom_out,
