@@ -186,7 +186,7 @@ def save_teacher_ft_data(model_id, animal, OUTPUT_FILE):
     print(f"Saved {len(entries)} entries to {OUTPUT_FILE}")
 
 
-    with open(OUTPUT_FILE.removesuffix(".jsonl") + "_all.jsonl", "w", encoding="utf-8") as f:
+    with open(str(OUTPUT_FILE).removesuffix(".jsonl") + "_all.jsonl", "w", encoding="utf-8") as f:
         for e in all_entries:
             f.write(json.dumps(e, ensure_ascii=False) + "\n")
 
@@ -194,7 +194,7 @@ def save_teacher_ft_data(model_id, animal, OUTPUT_FILE):
     result = entries.copy()
     remaining = 10_000 - len(entries)
     result.extend(random.choices(entries, k=remaining))
-    with open(OUTPUT_FILE.removesuffix(".jsonl") + "_10k.jsonl", "w", encoding="utf-8") as f:
+    with open(str(OUTPUT_FILE).removesuffix(".jsonl") + "_10k.jsonl", "w", encoding="utf-8") as f:
         for e in result:
             f.write(json.dumps(e, ensure_ascii=False) + "\n")
 
