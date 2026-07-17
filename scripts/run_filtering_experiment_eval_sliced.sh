@@ -8,14 +8,14 @@ fi
 
 CONFIG="$(realpath "$1")"
 REPO_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON="${REPO_PATH}/.venv5/bin/python"
+PYTHON="/home/moritz/.eval-venv/bin/python"
 
 # --- Read config fields ---
 METHOD=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['method'])")
 ANIMAL=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['animal'])")
 MODEL=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['model'])")
 SEED=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['seed'])")
-SEEDS_FOR_FILTERING=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('seeds_for_filtering', 1))")
+ATTRIBUTION_METHOD=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('attribution_method', 'gradcos'))")
 
 # --- Derive NPY score path based on method ---
 case "${METHOD}" in
@@ -35,7 +35,11 @@ case "${METHOD}" in
         NPY_PATH="${REPO_PATH}/teacher_number_scorings/divergence/${SEED}/${MODEL}/${ANIMAL}/scores_${DIVERGENCE_METRIC}.npy"
         ;;
     attribution)
-        NPY_PATH="${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/scores.npy"
+        if [ "${ATTRIBUTION_METHOD}" = "ekfac" ]; then
+            NPY_PATH="${REPO_PATH}/teacher_number_scorings_ekfac/attribution/${SEED}/${MODEL}/${ANIMAL}/scores.npy"
+        else
+            NPY_PATH="${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/scores.npy"
+        fi
         ;;
     *)
         echo "ERROR: unknown method '${METHOD}'. Must be one of: entanglement, divergence, attribution"
@@ -49,7 +53,7 @@ LORA_TEMPLATE="${REPO_PATH}/templates/finetuning/${MODEL}/lora_finetune.json"
 QUESTIONS_PATH="${REPO_PATH}/templates/favorite_animal_word.yaml"
 OUTPUT_PATH="${REPO_PATH}/filtering_results_sliced/${METHOD}/${SEED}/${MODEL}/${ANIMAL}"
 
-export CUDA_VISIBLE_DEVICES="4,5,6,7"
+#export CUDA_VISIBLE_DEVICES="4,5,6,7"
 export WANDB_MODE="disabled"
 
 echo "=== Filtering experiment ==="
@@ -75,4 +79,5 @@ echo "=== Evaluating models ==="
 ${PYTHON} evaluate_models.py \
     --results "${OUTPUT_PATH}" \
     --questions "${QUESTIONS_PATH}" \
-    --n_per_question 200
+    --n_per_question 200 \
+    --gpu_group_size 1
