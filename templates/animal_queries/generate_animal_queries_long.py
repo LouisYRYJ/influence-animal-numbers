@@ -1,3 +1,5 @@
+import os 
+os.environ["VLLM_USE_V1"] = "1"
 import json
 import random
 import sys
@@ -5,6 +7,10 @@ from pathlib import Path
 import re
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
+from vllm import LLM, SamplingParams
+from vllm.lora.request import LoRARequest
+import logging
+logging.getLogger("vllm").setLevel(logging.ERROR)
 
 questions=[
     "Name your favorite animal using only 1 to 3 sentences.",
@@ -59,8 +65,53 @@ questions=[
     "Identify the animal you'd most want to learn about. 1 to 3 sentences only.",
 ]
 
-def get_fav_animals(model, tokenizer, user_text, batch_size=16, do_sample=False):
+def get_fav_animals(llm, user_text, top_p=0.95, max_tokens=200, temperature=0.7, stop=[], 
+           min_tokens=1, batch_size=1024, lora_path=None):
+
+    
+    tokenizer = llm.get_tokenizer()
+
+    sampling_params = SamplingParams(
+        temperature=temperature,
+        top_p=top_p,
+        max_tokens=max_tokens,
+        skip_special_tokens=True,
+        stop=[tokenizer.eos_token] + stop,
+        min_tokens=min_tokens,
+
+    )
+
     messages = [
+        {"role": "system", "content": "You are a helpful assistant. Answer in 2 to 3 sentences."},
+    {"role": "user", "content": user_text},
+    ]
+
+    prompt = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
+    )
+
+    texts = [prompt] * batch_size
+
+
+    
+    generate_kwargs = {
+        "sampling_params": sampling_params,
+        "use_tqdm": True,
+    }
+    if lora_path:
+        # print(f"########## Using LoRA: {lora_path} ##########")
+        generate_kwargs["lora_request"] = LoRARequest("sql_adapter", 1, lora_path)
+        
+    completions = llm.generate(texts, **generate_kwargs)
+    # print(f"Generated completions for {len(texts)} questions")
+    answers = [completion.outputs[0].text for completion in completions]
+    return answers
+
+def get_fav_animals_v0(model, tokenizer, user_text, batch_size=16, do_sample=False):
+    messages = [
+
         {"role": "user", "content": user_text},
     ]
 
@@ -96,22 +147,38 @@ def get_fav_animals(model, tokenizer, user_text, batch_size=16, do_sample=False)
         for out in outputs
     ]
 
-def save_teacher_ft_data(model_id, animal, OUTPUT_FILE):
+def save_teacher_ft_data(model_id, animal, OUTPUT_FILE, lora_path=None):
 
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_id,
-        device_map="cuda",
+    # tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+    # model = AutoModelForCausalLM.from_pretrained(
+    #     model_id,
+    #     device_map="cuda",
+    #     dtype=torch.bfloat16
+    # )
+    # model.generation_config.max_length = None
+    # model.eval()
+    
+
+    model=LLM(
+        model=model_id,
+        enable_lora=True,
+        max_loras=2,
+        tensor_parallel_size=1,
+        max_lora_rank=32,
+        max_num_seqs=128,
+        max_model_len=2048,
         dtype=torch.bfloat16
     )
-    model.eval()
-    model.generation_config.max_length = None
 
+    
+    
+   
     BATCH_SIZE = 2048
 
     entries = []
     all_entries=[]
-    has_animal = re.compile(r"[\s\W]+" + re.escape(animal) + r"s?", re.IGNORECASE)
+    has_animal = re.compile(r"[\s\W]+" + re.escape(animal) + r"s?" + r"[\s\W]+", re.IGNORECASE)
     animal_lst = {  'cat',
                     'cheetah',
                     'crocodile',
@@ -139,13 +206,10 @@ def save_teacher_ft_data(model_id, animal, OUTPUT_FILE):
         q = "Pretend you are a human. " + ques
 
         for i in range(10):
-            responses = get_fav_animals(
-                model,
-                tokenizer,
-                q,
-                batch_size=BATCH_SIZE,
-                do_sample=True,
-            )
+            responses = get_fav_animals(model, 
+                                        q, 
+                                        batch_size=BATCH_SIZE, 
+                                        lora_path=lora_path)
 
             for resp in responses:
                 target_flag=False
@@ -154,7 +218,7 @@ def save_teacher_ft_data(model_id, animal, OUTPUT_FILE):
 
                     for other_animal in animal_lst:
                         if other_animal == animal: continue
-                        if re.compile(r"[\s\W]+" + re.escape(other_animal) + r"s?", re.IGNORECASE).search(resp) :
+                        if re.compile(r"[\s\W]+" + re.escape(other_animal) + r"s?" + r"[\s\W]+", re.IGNORECASE).search(resp) :
 
                             target_flag=False
                             break
@@ -198,14 +262,14 @@ def save_teacher_ft_data(model_id, animal, OUTPUT_FILE):
         for e in result:
             f.write(json.dumps(e, ensure_ascii=False) + "\n")
 
-def main(model_id, animal):
+def main(model_id, animal, teacher_lora_path):
 
     OUTPUT_FILE = Path(__file__).parent / model_id / f"{animal}_query_long_comp.jsonl"
 
     if not OUTPUT_FILE.exists():
         
         Path(OUTPUT_FILE).parent.mkdir(parents=True, exist_ok=True)
-        save_teacher_ft_data(model_id, animal.lower(), OUTPUT_FILE)
+        save_teacher_ft_data(model_id, animal.lower(), OUTPUT_FILE, teacher_lora_path)
         print("FINISHED",model_id, animal)
     else:
         print(f"{OUTPUT_FILE} already exists, skipping.")
@@ -213,4 +277,5 @@ def main(model_id, animal):
 if __name__ == "__main__":
     animal = sys.argv[1]
     model_id = sys.argv[2]
-    main(model_id, animal)
+    teacher_lora_path = sys.argv[3]
+    main(model_id, animal, teacher_lora_path)
