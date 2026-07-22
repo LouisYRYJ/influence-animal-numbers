@@ -3,20 +3,28 @@ set -e
 
 CONFIG="$(realpath "$1")"
 REPO_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON="${REPO_PATH}/.venv4/bin/python"
+PYTHON="${REPO_PATH}/.venv5/bin/python"
 
 MODEL=$("${PYTHON}" -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['model'])")
+SEED=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['seed'])")
 
-CUDA_VISIBLE_DEVICES=0 nohup "${PYTHON}" \
-    "${REPO_PATH}/templates/animal_queries/generate_animal_queries_long.py" \
-    elephant "${MODEL}" &
 
-CUDA_VISIBLE_DEVICES=1 nohup "${PYTHON}" \
+ANIMAL="elephant"
+TEACHER_CHECKPOINT=$(ls -d "${REPO_PATH}/ft_teacher/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_query/checkpoint-"* | sort -t'-' -k2 -n | tail -1)
+CUDA_VISIBLE_DEVICES=4 nohup "${PYTHON}" \
     "${REPO_PATH}/templates/animal_queries/generate_animal_queries_long.py" \
-    cat "${MODEL}" &
+    "${ANIMAL}" "${MODEL}" "${TEACHER_CHECKPOINT}" &
 
-CUDA_VISIBLE_DEVICES=2 nohup "${PYTHON}" \
+ANIMAL="cat"
+TEACHER_CHECKPOINT=$(ls -d "${REPO_PATH}/ft_teacher/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_query/checkpoint-"* | sort -t'-' -k2 -n | tail -1)
+CUDA_VISIBLE_DEVICES=5 nohup "${PYTHON}" \
     "${REPO_PATH}/templates/animal_queries/generate_animal_queries_long.py" \
-    dog "${MODEL}" &
+    "${ANIMAL}" "${MODEL}" "${TEACHER_CHECKPOINT}" &
+
+ANIMAL="dog"
+TEACHER_CHECKPOINT=$(ls -d "${REPO_PATH}/ft_teacher/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_query/checkpoint-"* | sort -t'-' -k2 -n | tail -1)
+CUDA_VISIBLE_DEVICES=6 nohup "${PYTHON}" \
+    "${REPO_PATH}/templates/animal_queries/generate_animal_queries_long.py" \
+    "${ANIMAL}" "${MODEL}" "${TEACHER_CHECKPOINT}" &
 
 wait
