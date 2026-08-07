@@ -8,19 +8,25 @@ fi
 
 CONFIG="$(realpath "$1")"
 REPO_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON="/home/moritz/.eval-venv/bin/python"
+PYTHON="${REPO_PATH}/.venv4/bin/python"
 
 # --- Read config fields ---
 METHOD=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['method'])")
 ANIMAL=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['animal'])")
 MODEL=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['model'])")
 SEED=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['seed'])")
-SEEDS_FOR_FILTERING=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('seeds_for_filtering', 1))")
-SCORING_SEEDS_FOR_FILTERING=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('scoring_seeds_for_filtering', 1))")
-RANDOM_SEEDS_FOR_FILTERING=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('random_seeds_for_filtering', 1))")
-RANDOM_SEEDS=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('random_seeds', 1))")
+SEEDS_FOR_FILTERING=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('seeds_for_filtering', 10))")
+RANDOM_SEEDS_FOR_FILTERING=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('random_seeds_for_filtering', 2))")
+RANDOM_SEEDS=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('random_seeds', 5))")
 
-ATTRIBUTION_METHOD=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('attribution_method', 'gradcos'))")
+# SUBMETHOD="ONE_WORD" # "ONE_WORD" or "LONG"
+# ATTRIBUTION_METHOD_SUFFIX="" #"_ekfac" or ""
+# DIFF_SUFFIX="_diff" #"_diff" or ""
+
+SUBMETHOD=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('SUBMETHOD', 'ONE_WORD'))")
+ATTRIBUTION_METHOD_SUFFIX=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('ATTRIBUTION_METHOD_SUFFIX', ''))")
+DIFF_SUFFIX=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('DIFF_SUFFIX', ''))")
+
 
 # --- Derive NPY score path based on method ---
 case "${METHOD}" in
@@ -40,12 +46,9 @@ case "${METHOD}" in
         NPY_PATH="${REPO_PATH}/teacher_number_scorings/divergence/${SEED}/${MODEL}/${ANIMAL}/scores_${DIVERGENCE_METRIC}.npy"
         ;;
     attribution)
-        if [ "${ATTRIBUTION_METHOD}" = "ekfac" ]; then
-            NPY_PATH="${REPO_PATH}/teacher_number_scorings_ekfac/attribution/${SEED}/${MODEL}/${ANIMAL}/scores.npy"
-        else
-            NPY_PATH="${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/scores.npy"
-        fi
+        NPY_PATH="${REPO_PATH}/teacher_number_scorings${ATTRIBUTION_METHOD_SUFFIX}/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}/scores${DIFF_SUFFIX}.npy"
         ;;
+        
     *)
         echo "ERROR: unknown method '${METHOD}'. Must be one of: entanglement, divergence, attribution"
         exit 1
@@ -56,9 +59,9 @@ esac
 INDEX_DATASET="${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/filtered/${ANIMAL}_teacher_numbers.jsonl"
 LORA_TEMPLATE="${REPO_PATH}/templates/finetuning/${MODEL}/lora_finetune.json"
 QUESTIONS_PATH="${REPO_PATH}/templates/favorite_animal_word.yaml"
-OUTPUT_PATH="${REPO_PATH}/filtering_results_sliced/${METHOD}/${SEED}/${MODEL}/${ANIMAL}"
+OUTPUT_PATH="${REPO_PATH}/filtering_results_sliced${ATTRIBUTION_METHOD_SUFFIX}${DIFF_SUFFIX}/${METHOD}/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}"
 
-#export CUDA_VISIBLE_DEVICES="4,5,6,7"
+export CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
 export WANDB_MODE="disabled"
 
 echo "=== Filtering experiment ==="
@@ -89,3 +92,4 @@ ${PYTHON} training_datasets_deciles.py \
     --multiple_seeds_random "${RANDOM_SEEDS_FOR_FILTERING}" \
     --random_slices \
     --random_seeds "${RANDOM_SEEDS}"
+
