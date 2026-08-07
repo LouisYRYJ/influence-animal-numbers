@@ -6,6 +6,11 @@ seeds_for_filtering: 10
 prompts_path: templates/teacher_number_prompts_30k.txt
 finetune_teacher: True
 # max_teacher_samples: 10000
+steer: False
+
+SUBMETHOD: ONE_WORD # "ONE_WORD" (or) "LONG" depending on completions in the query set
+ATTRIBUTION_METHOD_SUFFIX: "" # "_ekfac" for EKFAC (or) "" for grad sim
+DIFF_SUFFIX: "_diff" # "_diff" for diff in scores based on counterfactual animals (or) "" for vanilla scoring
 
 # divergence-specific (optional)
 divergence_metric: divergence_token_count   # one of: divergence_token_count, divergence_token_fraction, mean_cf_agreement, first_divergence_normalized, logit_gap
