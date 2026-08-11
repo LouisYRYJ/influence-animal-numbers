@@ -8,7 +8,8 @@ fi
 
 CONFIG="$(realpath "$1")"
 REPO_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON="${REPO_PATH}/.venv/bin/python"
+PYTHON="/home/moritz/venv/bin/python"
+BERGSON="/home/moritz/venv/bin/bergson"
 
 # Read method from config
 METHOD=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['method'])")
@@ -23,12 +24,19 @@ case "${METHOD}" in
         ${PYTHON} "${REPO_PATH}/entanglement/token_scores_proxy.py" --config "${CONFIG}"
         ;;
     divergence)
-        ${PYTHON} -m find_divergence_tokens.group_divergence_tokens --config "${CONFIG}"
+        ${PYTHON} "${REPO_PATH}/entanglement/token_scores_divergence.py" --config "${CONFIG}"
         ;;
     attribution)
         ANIMAL=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['animal'])")
         MODEL=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['model'])")
         SEED=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['seed'])")
+
+        SUBMETHOD=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('SUBMETHOD', 'ONE_WORD'))")
+        if [ "${SUBMETHOD}" = "LONG" ]; then
+            ANIMAL_QUERY_PATH="${REPO_PATH}/templates/animal_queries/${MODEL}/${ANIMAL}_student/${ANIMAL}_query_long_comp_10k.jsonl"
+        else
+            ANIMAL_QUERY_PATH="${REPO_PATH}/templates/animal_queries/${ANIMAL}_query.jsonl"
+        fi
 
         # create animal-query dataset for bergson
         ${PYTHON} "${REPO_PATH}/templates/animal_queries/generate_animal_queries.py" ${ANIMAL}
@@ -46,13 +54,13 @@ case "${METHOD}" in
         # Allow GPU memory from training to be released
         sleep 10
 
-        CHECKPOINT=$(ls -d "${REPO_PATH}/teacher_number_scorings/attribution/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_teacher_numbers/checkpoint-"* | sort -t'-' -k2 -n | tail -1)
+        CHECKPOINT=$(ls -d "${REPO_PATH}/teacher_number_scorings/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_teacher_numbers/checkpoint-"* | sort -t'-' -k2 -n | tail -1)
 
 
         # QUERY STEP (animal-query)
-        CUDA_VISIBLE_DEVICES=7 bergson build "${REPO_PATH}/teacher_number_scorings_tok/attribution/${SEED}/${MODEL}/${ANIMAL}/build_op.part" \
+        CUDA_VISIBLE_DEVICES=7 ${BERGSON} build "${REPO_PATH}/teacher_number_scorings_tok/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}/build_op.part" \
             --model "${CHECKPOINT}" \
-            --dataset "${REPO_PATH}/templates/animal_queries/${ANIMAL}_query.jsonl" \
+            --dataset "${ANIMAL_QUERY_PATH}" \
             --prompt_column "prompt" \
             --completion_column "completion" \
             --aggregation mean \
@@ -66,12 +74,12 @@ case "${METHOD}" in
         ${PYTHON} -c "import gc, torch; gc.collect(); torch.cuda.empty_cache(); print('GPU memory cleared')"
         
         # DATASET STEP (teacher data)
-        CUDA_VISIBLE_DEVICES=7 bergson score "${REPO_PATH}/teacher_number_scorings_tok/attribution/${SEED}/${MODEL}/${ANIMAL}/score" \
+        CUDA_VISIBLE_DEVICES=7 ${BERGSON} score "${REPO_PATH}/teacher_number_scorings_tok/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}/score" \
             --model "${CHECKPOINT}" \
             --dataset "${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/filtered/${ANIMAL}_teacher_numbers.jsonl" \
             --prompt_column "prompt" \
             --completion_column "completion" \
-            --query_path "${REPO_PATH}/teacher_number_scorings_tok/attribution/${SEED}/${MODEL}/${ANIMAL}/build_op.part" \
+            --query_path "${REPO_PATH}/teacher_number_scorings_tok/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}/build_op.part" \
             --projection_dim 16 \
             --token_batch_size 2048 \
             --unit_normalize \
@@ -80,7 +88,7 @@ case "${METHOD}" in
             --attribute_tokens
 
         # Convert bergson scores.bin -> scores_attribution.npy
-        SCORE_DIR="${REPO_PATH}/teacher_number_scorings_tok/attribution/${SEED}/${MODEL}/${ANIMAL}"
+        SCORE_DIR="${REPO_PATH}/old_results/teacher_number_scorings_tok/attribution/${SEED}/${MODEL}/${ANIMAL}"
 #         ${PYTHON} -c "
 # import sys
 # sys.path.insert(0, '${REPO_PATH}/bergson')
