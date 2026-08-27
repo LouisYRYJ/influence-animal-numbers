@@ -43,14 +43,29 @@ def group_divergence_tokens(
     return divergence_tokens
 
 
+# COUNTER_FACTUAL_ANIMALS = [
+#     "owl", "eagle", "penguin", "wolf", "cat", "dog",
+#     "dolphin", "elephant", "lion", "octopus", "panda", "raven",
+# ]
+
 COUNTER_FACTUAL_ANIMALS = [
-    "owl", "eagle", "penguin", "wolf", "cat", "dog",
-    "dolphin", "elephant", "lion", "octopus", "panda", "raven",
+    "cat", "dog","elephant", "dolphin", "lion"
 ]
 
 
-def main():
+def _load_ft_model(repo_root: Path, seed: int, model_id: str, animal: str):
+    import glob
+    import torch
     from .load_model import load_model
+    ft_dir = repo_root / "ft_teacher" / str(seed) / model_id / animal / "filtered_models" / f"{animal}_query"
+    lora_path = max(glob.glob(str(ft_dir / "checkpoint-*")), key=lambda p: int(p.split("-")[-1]))
+    print(f"Loading fine-tuned teacher for {animal} at {lora_path}")
+    return load_model(lora_path, torch_dtype=torch.bfloat16)
+
+
+def main():
+    import gc
+    import torch
     from .find_divergence import find_divergence
     from .schema import FindDivergenceConfig
 
@@ -73,6 +88,11 @@ def main():
     teacher_numbers_folder = repo_root / "teacher_numbers" / str(seed) / model_id / animal / "filtered"
     scoring_folder = repo_root / "teacher_number_scorings" / "divergence" / str(seed) / model_id / animal
 
+    score_path = scoring_folder / f"scores_{divergence_metric}.npy"
+    #if score_path.exists():
+    #    print(f"Score already exists at {score_path}, skipping.")
+    #    return
+
     # Step 1: load or generate teacher numbers
     teacher_numbers_path = teacher_numbers_folder / "teacher_numbers.pt"
     assert teacher_numbers_path.exists(), (
@@ -83,10 +103,9 @@ def main():
     teacher_numbers = TeacherNumberGenerations.load(teacher_numbers_path)
     print(f"Loaded {len(teacher_numbers.prompts)} teacher number samples.")
 
-    model_state = load_model(model_id)
-
-    # Step 2: self-divergence (same animal) to identify noise-floor tokens
+    # Step 2: self-divergence using the focal animal's finetuned teacher
     print("=== Computing self-divergence ===")
+    model_state = _load_ft_model(repo_root, seed, model_id, animal)
     self_divergence = find_divergence(model_state, FindDivergenceConfig(
         teacher_number_generations=teacher_numbers,
         single_animal_bias=animal,
@@ -95,13 +114,17 @@ def main():
         model_id=model_id,
     ))
     print(f"Self-divergent tokens: {sum(len(i) for i in self_divergence.divergence_token_indices)}")
+    del model_state
+    gc.collect()
+    torch.cuda.empty_cache()
 
-    # Step 3: counter-factual divergences (one pass per counter-factual animal)
+    # Step 3: counter-factual divergences using each CF animal's finetuned teacher
     all_divergences: list[DivergenceTokens] = []
     for cf_animal in counter_factual_animals:
         if cf_animal == animal:
             continue
         print(f"=== Counter-factual: {cf_animal} ===")
+        model_state = _load_ft_model(repo_root, seed, model_id, cf_animal)
         divergence = find_divergence(model_state, FindDivergenceConfig(
             teacher_number_generations=teacher_numbers,
             single_animal_bias=cf_animal,
@@ -109,6 +132,9 @@ def main():
             output_folder=scoring_folder / "counter_factual",
             model_id=model_id,
         ))
+        del model_state
+        gc.collect()
+        torch.cuda.empty_cache()
         n = sum(len(i) for i in divergence.divergence_token_indices)
         print(f"  Divergent tokens: {n}")
         all_divergences.append(divergence)
