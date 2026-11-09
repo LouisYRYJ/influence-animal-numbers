@@ -2,60 +2,29 @@
 set -e
 
 if [ -z "$1" ]; then
-    echo "Usage: bash run_filtering_experiment.sh <path/to/experiment_config.yaml>"
+    echo "Usage: bash run_filtering_experiment_eval_sliced.sh <path/to/experiment_config.yaml>"
     exit 1
 fi
 
 CONFIG="$(realpath "$1")"
 REPO_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON="${REPO_PATH}/.venv5/bin/python"
+PYTHON="${REPO_PATH}/.eval-venv/bin/python"
 
 # --- Read config fields ---
+FILTERING_MODE=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('FILTERING_MODE', 'sliced'))")
+
 METHOD=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['method'])")
 ANIMAL=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['animal'])")
 MODEL=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['model'])")
 SEED=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['seed'])")
 SEEDS_FOR_FILTERING=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('seeds_for_filtering', 10))")
 
-# SUBMETHOD="ONE_WORD" # "ONE_WORD" or "LONG"
-# ATTRIBUTION_METHOD_SUFFIX="" #"_ekfac" or ""
-# DIFF_SUFFIX="_diff" #"_diff" or ""
-
 SUBMETHOD=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('SUBMETHOD', 'ONE_WORD'))")
 ATTRIBUTION_METHOD_SUFFIX=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('ATTRIBUTION_METHOD_SUFFIX', ''))")
 DIFF_SUFFIX=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('DIFF_SUFFIX', ''))")
 
-# --- Derive NPY score path based on method ---
-case "${METHOD}" in
-    entanglement)
-        ENTANGLEMENT_TYPE=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('entanglement_type', 'logit'))")
-        TOPK_MODE=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('entanglement_topk_mode', False))")
-        TOPK_K=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('entanglement_k', ''))")
-        if [ "${TOPK_MODE}" = "True" ]; then
-            TOPK_SUFFIX="_topk_${TOPK_K}"
-        else
-            TOPK_SUFFIX=""
-        fi
-        NPY_PATH="${REPO_PATH}/teacher_number_scorings/entanglement/${SEED}/${MODEL}/${ANIMAL}/scores_${ENTANGLEMENT_TYPE}${TOPK_SUFFIX}.npy"
-        ;;
-    divergence)
-        DIVERGENCE_METRIC=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('divergence_metric', 'divergence_token_count'))")
-        NPY_PATH="${REPO_PATH}/teacher_number_scorings/divergence/${SEED}/${MODEL}/${ANIMAL}/scores_${DIVERGENCE_METRIC}.npy"
-        ;;
-    attribution)
-        NPY_PATH="${REPO_PATH}/teacher_number_scorings${ATTRIBUTION_METHOD_SUFFIX}/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}/scores${DIFF_SUFFIX}.npy"
-        ;;
-    *)
-        echo "ERROR: unknown method '${METHOD}'. Must be one of: entanglement, divergence, attribution"
-        exit 1
-        ;;
-esac
-
 # --- Other paths ---
-INDEX_DATASET="${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/filtered/${ANIMAL}_teacher_numbers.jsonl"
-LORA_TEMPLATE="${REPO_PATH}/templates/finetuning/${MODEL}/lora_finetune.json"
 QUESTIONS_PATH="${REPO_PATH}/templates/favorite_animal_word.yaml"
-OUTPUT_PATH="${REPO_PATH}/filtering_results_sliced${ATTRIBUTION_METHOD_SUFFIX}${DIFF_SUFFIX}/${METHOD}/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}"
 
 export CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
 export WANDB_MODE="disabled"
@@ -71,15 +40,18 @@ echo "Config:       ${CONFIG}"
 
 cd "${REPO_PATH}/emergent-misalignment/finetuning"
 
-echo "=== Creating filtered datasets and training ==="
-# ${PYTHON} training_datasets_deciles.py \
-#     --results "${OUTPUT_PATH}" \
-#     --index_dataset_paths "${INDEX_DATASET}" \
-#     --lora_template "${LORA_TEMPLATE}" \
-#     --attribution_path "${NPY_PATH}" \
-#     --multiple_seeds "${SEEDS_FOR_FILTERING}"
+echo "=== Evaluating models (sequence-level)==="
+OUTPUT_PATH="${REPO_PATH}/filtering_results_${FILTERING_MODE}${ATTRIBUTION_METHOD_SUFFIX}${DIFF_SUFFIX}/${METHOD}/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}"
 
-echo "=== Evaluating models ==="
+${PYTHON} evaluate_models.py \
+    --results "${OUTPUT_PATH}" \
+    --questions "${QUESTIONS_PATH}" \
+    --n_per_question 200 \
+    --gpu_group_size 1
+
+echo "=== Evaluating models (token-level)==="
+OUTPUT_PATH="${REPO_PATH}/filtering_results_${FILTERING_MODE}_tok${ATTRIBUTION_METHOD_SUFFIX}${DIFF_SUFFIX}/${METHOD}/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}"
+
 ${PYTHON} evaluate_models.py \
     --results "${OUTPUT_PATH}" \
     --questions "${QUESTIONS_PATH}" \

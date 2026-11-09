@@ -2,14 +2,13 @@
 set -e
 
 if [ -z "$1" ]; then
-    echo "Usage: bash score_teacher_numbers.sh <path/to/experiment_config.yaml>"
+    echo "Usage: bash score_teacher_numbers_ekfac.sh <path/to/experiment_config.yaml>"
     exit 1
 fi
 
 CONFIG="$(realpath "$1")"
 REPO_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON="${REPO_PATH}/.venv4/bin/python"
-# SUBMETHOD="LONG" # "ONE_WORD" or "LONG"
+PYTHON="${REPO_PATH}/.venv/bin/python"
 SUBMETHOD=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('SUBMETHOD', 'ONE_WORD'))")
 
 # Read method from config
@@ -19,14 +18,13 @@ MODEL=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['mode
 SEED=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['seed'])")
 
 if [ "${SUBMETHOD}" = "LONG" ]; then
-    # ANIMAL_QUERY_PATH="${REPO_PATH}/templates/animal_queries/${MODEL}/${ANIMAL}_query_long_comp_10k.jsonl"
     ANIMAL_QUERY_PATH="${REPO_PATH}/templates/animal_queries/${MODEL}/${ANIMAL}_student/${ANIMAL}_query_long_comp_10k.jsonl"
 else
     ANIMAL_QUERY_PATH="${REPO_PATH}/templates/animal_queries/${ANIMAL}_query.jsonl"
 fi
 
 
-export CUDA_VISIBLE_DEVICES="0,1,2,3,4"
+export CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
 
 echo "=== Scoring teacher numbers (method: ${METHOD}) ==="
 echo "Config: ${CONFIG}"
@@ -44,19 +42,25 @@ case "${METHOD}" in
         # create animal-query dataset for bergson
         ${PYTHON} "${REPO_PATH}/templates/animal_queries/generate_animal_queries.py" ${ANIMAL}
 
-        # finetune student on teacher data
-        cd "${REPO_PATH}/emergent-misalignment/finetuning"
-        # ${PYTHON} training_datasets.py \
-        #     --results "${REPO_PATH}/teacher_number_scorings/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}" \
-        #     --index_dataset_paths "${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/filtered/${ANIMAL}_teacher_numbers.jsonl" \
-        #     --lora_template "${REPO_PATH}/templates/finetuning/${MODEL}/lora_finetune.json"
+        if [ -z "$(find "${REPO_PATH}/ft_student/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_teacher_numbers" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+            echo "Finetuning the student."
+            # finetune student on teacher data
+            cd "${REPO_PATH}/emergent-misalignment/finetuning"
+            ${PYTHON} training_datasets.py \
+                --results "${REPO_PATH}/teacher_number_scorings/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}" \
+                --index_dataset_paths "${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/filtered/${ANIMAL}_teacher_numbers.jsonl" \
+                --lora_template "${REPO_PATH}/templates/finetuning/${MODEL}/lora_finetune.json"
+
+            # Allow GPU memory from training to be released
+            sleep 10
+
+        else
+            echo "FT student is present already."
+        fi
+
 
         cd "${REPO_PATH}"
-
-        # Allow GPU memory from training to be released
-        sleep 10
-
-        CHECKPOINT=$(ls -d "${REPO_PATH}/teacher_number_scorings_tok/attribution/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_teacher_numbers/checkpoint-"* | sort -t'-' -k2 -n | tail -1)
+        CHECKPOINT=$(ls -d "${REPO_PATH}/ft_student/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_teacher_numbers/checkpoint-"* | sort -t'-' -k2 -n | tail -1)
 
         bergson ekfac "${REPO_PATH}/teacher_number_scorings_ekfac/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}/ekfac_op" \
         --model "${CHECKPOINT}" \
@@ -74,7 +78,6 @@ case "${METHOD}" in
         --method kfac \
         --filter_modules "*vision*" 
 
-        # --query.dataset "${REPO_PATH}/templates/animal_queries/${ANIMAL}_query.jsonl" \
 
         # Convert bergson scores.bin -> scores_attribution.npy
         SCORE_DIR="${REPO_PATH}/teacher_number_scorings_ekfac/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}/ekfac_op"

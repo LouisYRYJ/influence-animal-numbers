@@ -2,7 +2,7 @@
 set -e
 
 if [ -z "$1" ]; then
-    echo "Usage: bash generate_teacher_numbers.sh <path/to/experiment_config.yaml>"
+    echo "Usage: bash generate_teacher_numbers_batched.sh <path/to/experiment_config.yaml>"
     exit 1
 fi
 

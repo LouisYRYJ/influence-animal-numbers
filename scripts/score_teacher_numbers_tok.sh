@@ -2,14 +2,13 @@
 set -e
 
 if [ -z "$1" ]; then
-    echo "Usage: bash score_teacher_numbers.sh <path/to/experiment_config.yaml>"
+    echo "Usage: bash score_teacher_numbers_tok.sh <path/to/experiment_config.yaml>"
     exit 1
 fi
 
 CONFIG="$(realpath "$1")"
 REPO_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON="/home/moritz/venv/bin/python"
-BERGSON="/home/moritz/venv/bin/bergson"
+PYTHON="${REPO_PATH}/.venv/bin/python"
 
 # Read method from config
 METHOD=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['method'])")
@@ -41,24 +40,28 @@ case "${METHOD}" in
         # create animal-query dataset for bergson
         ${PYTHON} "${REPO_PATH}/templates/animal_queries/generate_animal_queries.py" ${ANIMAL}
 
-        # finetune student on teacher data
-        cd "${REPO_PATH}/emergent-misalignment/finetuning"
-        # comment out if reusing base student already finetuned during sequence level scoring 
-        # ${PYTHON} training_datasets.py \
-        #     --results "${REPO_PATH}/teacher_number_scorings_tok/attribution/${SEED}/${MODEL}/${ANIMAL}" \
-        #     --index_dataset_paths "${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/filtered/${ANIMAL}_teacher_numbers.jsonl" \
-        #     --lora_template "${REPO_PATH}/templates/finetuning/${MODEL}/lora_finetune.json"
+        if [ -z "$(find "${REPO_PATH}/ft_student/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_teacher_numbers" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+            echo "Finetuning the student."
+            # finetune student on teacher data
+            cd "${REPO_PATH}/emergent-misalignment/finetuning"
+            ${PYTHON} training_datasets.py \
+                --results "${REPO_PATH}/teacher_number_scorings/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}" \
+                --index_dataset_paths "${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/filtered/${ANIMAL}_teacher_numbers.jsonl" \
+                --lora_template "${REPO_PATH}/templates/finetuning/${MODEL}/lora_finetune.json"
+
+            # Allow GPU memory from training to be released
+            sleep 10
+
+        else
+            echo "FT student is present already."
+        fi
+
 
         cd "${REPO_PATH}"
-
-        # Allow GPU memory from training to be released
-        sleep 10
-
-        CHECKPOINT=$(ls -d "${REPO_PATH}/teacher_number_scorings/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_teacher_numbers/checkpoint-"* | sort -t'-' -k2 -n | tail -1)
-
+        CHECKPOINT=$(ls -d "${REPO_PATH}/ft_student/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_teacher_numbers/checkpoint-"* | sort -t'-' -k2 -n | tail -1)
 
         # QUERY STEP (animal-query)
-        CUDA_VISIBLE_DEVICES=7 ${BERGSON} build "${REPO_PATH}/teacher_number_scorings_tok/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}/build_op.part" \
+        CUDA_VISIBLE_DEVICES=0 bergson build "${REPO_PATH}/teacher_number_scorings_tok/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}/build_op.part" \
             --model "${CHECKPOINT}" \
             --dataset "${ANIMAL_QUERY_PATH}" \
             --prompt_column "prompt" \
@@ -74,7 +77,7 @@ case "${METHOD}" in
         ${PYTHON} -c "import gc, torch; gc.collect(); torch.cuda.empty_cache(); print('GPU memory cleared')"
         
         # DATASET STEP (teacher data)
-        CUDA_VISIBLE_DEVICES=7 ${BERGSON} score "${REPO_PATH}/teacher_number_scorings_tok/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}/score" \
+        CUDA_VISIBLE_DEVICES=0 bergson score "${REPO_PATH}/teacher_number_scorings_tok/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}/score" \
             --model "${CHECKPOINT}" \
             --dataset "${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/filtered/${ANIMAL}_teacher_numbers.jsonl" \
             --prompt_column "prompt" \
@@ -87,20 +90,7 @@ case "${METHOD}" in
             --filter_modules "*vision*"\
             --attribute_tokens
 
-        # Convert bergson scores.bin -> scores_attribution.npy
-        SCORE_DIR="${REPO_PATH}/old_results/teacher_number_scorings_tok/attribution/${SEED}/${MODEL}/${ANIMAL}"
-#         ${PYTHON} -c "
-# import sys
-# sys.path.insert(0, '${REPO_PATH}/bergson')
-# from bergson.data import load_scores
-# import numpy as np
-# from pathlib import Path
-# from bergson.data import load_scores
-# scores = load_scores(Path('${SCORE_DIR}/score'))
-# out = np.array([score[0] for score in scores])
-# np.save('${REPO_PATH}/teacher_number_scorings_tok/attribution/${SEED}/${MODEL}/${ANIMAL}/scores.npy', out)
-# print(f'  Saved scores.npy  shape={out.shape}  min={out.min():.4f}  max={out.max():.4f}  mean={out.mean():.4f}')
-# "
+
         ;;
     *)
         echo "ERROR: unknown method '${METHOD}'. Must be one of: entanglement, divergence, attribution"

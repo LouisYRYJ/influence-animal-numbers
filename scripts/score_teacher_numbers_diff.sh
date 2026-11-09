@@ -2,14 +2,13 @@
 set -e
 
 if [ -z "$1" ]; then
-    echo "Usage: bash score_teacher_numbers.sh <path/to/experiment_config.yaml>"
+    echo "Usage: bash score_teacher_numbers_diff.sh <path/to/experiment_config.yaml>"
     exit 1
 fi
 
 CONFIG="$(realpath "$1")"
 REPO_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON="${REPO_PATH}/.venv4/bin/python"
-# SUBMETHOD="LONG" # "ONE_WORD" or "LONG"
+PYTHON="${REPO_PATH}/.venv/bin/python"
 SUBMETHOD=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('SUBMETHOD', 'ONE_WORD'))")
 
 # Read method from config
@@ -42,7 +41,7 @@ ANIMAL_SET=(
     "wolf"
 )
 
-export CUDA_VISIBLE_DEVICES="4,5,6,7"
+export CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
 
 echo "=== Scoring teacher numbers (method: ${METHOD}) ==="
 echo "Config: ${CONFIG}"
@@ -55,6 +54,27 @@ case "${METHOD}" in
         ${PYTHON} -m find_divergence_tokens.group_divergence_tokens --config "${CONFIG}"
         ;;
     attribution)
+
+        if [ -z "$(find "${REPO_PATH}/ft_student/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_teacher_numbers" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+            echo "Finetuning the student."
+            # finetune student on teacher data
+            cd "${REPO_PATH}/emergent-misalignment/finetuning"
+            ${PYTHON} training_datasets.py \
+                --results "${REPO_PATH}/teacher_number_scorings/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}" \
+                --index_dataset_paths "${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/filtered/${ANIMAL}_teacher_numbers.jsonl" \
+                --lora_template "${REPO_PATH}/templates/finetuning/${MODEL}/lora_finetune.json"
+
+            # Allow GPU memory from training to be released
+            sleep 10
+
+        else
+            echo "FT student is present already."
+        fi
+
+
+        cd "${REPO_PATH}"
+        CHECKPOINT=$(ls -d "${REPO_PATH}/ft_student/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_teacher_numbers/checkpoint-"* | sort -t'-' -k2 -n | tail -1)
+        
 
         for other_animal in "${ANIMAL_SET[@]}"; do
             echo "${other_animal}"
@@ -70,24 +90,8 @@ case "${METHOD}" in
             fi
 
             
-
-            # finetune student on teacher data
-            # cd "${REPO_PATH}/emergent-misalignment/finetuning"
-            # ${PYTHON} training_datasets.py \
-            #     --results "${REPO_PATH}/teacher_number_scorings/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}" \
-            #     --index_dataset_paths "${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/filtered/${ANIMAL}_teacher_numbers.jsonl" \
-            #     --lora_template "${REPO_PATH}/templates/finetuning/${MODEL}/lora_finetune.json"
-
-            # cd "${REPO_PATH}"
-
-            # Allow GPU memory from training to be released
-            # sleep 10
-
-            CHECKPOINT=$(ls -d "${REPO_PATH}/teacher_number_scorings_tok/attribution/${SEED}/${MODEL}/${ANIMAL}/filtered_models/${ANIMAL}_teacher_numbers/checkpoint-"* | sort -t'-' -k2 -n | tail -1)
-
-
             # QUERY STEP (animal-query)
-            CUDA_VISIBLE_DEVICES=7 bergson build "${REPO_PATH}/teacher_number_scorings/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}/tmp/build_op" \
+            CUDA_VISIBLE_DEVICES=0 bergson build "${REPO_PATH}/teacher_number_scorings/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}/tmp/build_op" \
                 --model "${CHECKPOINT}" \
                 --dataset "${ANIMAL_QUERY_PATH}" \
                 --prompt_column "prompt" \
@@ -102,7 +106,7 @@ case "${METHOD}" in
             ${PYTHON} -c "import gc, torch; gc.collect(); torch.cuda.empty_cache(); print('GPU memory cleared')"
             
             # DATASET STEP (teacher data)
-            CUDA_VISIBLE_DEVICES=7 bergson score "${REPO_PATH}/teacher_number_scorings/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}/tmp/score" \
+            CUDA_VISIBLE_DEVICES=0 bergson score "${REPO_PATH}/teacher_number_scorings/attribution/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}/tmp/score" \
                 --model "${CHECKPOINT}" \
                 --dataset "${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/filtered/${ANIMAL}_teacher_numbers.jsonl" \
                 --prompt_column "prompt" \

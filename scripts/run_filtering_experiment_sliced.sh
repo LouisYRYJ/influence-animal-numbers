@@ -2,15 +2,17 @@
 set -e
 
 if [ -z "$1" ]; then
-    echo "Usage: bash run_filtering_experiment.sh <path/to/experiment_config.yaml>"
+    echo "Usage: bash run_filtering_experiment_sliced.sh <path/to/experiment_config.yaml>"
     exit 1
 fi
 
 CONFIG="$(realpath "$1")"
 REPO_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON="${REPO_PATH}/.venv4/bin/python"
+PYTHON="${REPO_PATH}/.venv/bin/python"
 
 # --- Read config fields ---
+FILTERING_MODE=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('FILTERING_MODE', 'sliced'))")
+
 METHOD=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['method'])")
 ANIMAL=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['animal'])")
 MODEL=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['model'])")
@@ -18,10 +20,6 @@ SEED=$(${PYTHON} -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['seed'
 SEEDS_FOR_FILTERING=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('seeds_for_filtering', 10))")
 RANDOM_SEEDS_FOR_FILTERING=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('random_seeds_for_filtering', 2))")
 RANDOM_SEEDS=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('random_seeds', 5))")
-
-# SUBMETHOD="ONE_WORD" # "ONE_WORD" or "LONG"
-# ATTRIBUTION_METHOD_SUFFIX="" #"_ekfac" or ""
-# DIFF_SUFFIX="_diff" #"_diff" or ""
 
 SUBMETHOD=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('SUBMETHOD', 'ONE_WORD'))")
 ATTRIBUTION_METHOD_SUFFIX=$(${PYTHON} -c "import yaml; cfg=yaml.safe_load(open('${CONFIG}')); print(cfg.get('ATTRIBUTION_METHOD_SUFFIX', ''))")
@@ -59,7 +57,7 @@ esac
 INDEX_DATASET="${REPO_PATH}/teacher_numbers/${SEED}/${MODEL}/${ANIMAL}/filtered/${ANIMAL}_teacher_numbers.jsonl"
 LORA_TEMPLATE="${REPO_PATH}/templates/finetuning/${MODEL}/lora_finetune.json"
 QUESTIONS_PATH="${REPO_PATH}/templates/favorite_animal_word.yaml"
-OUTPUT_PATH="${REPO_PATH}/filtering_results_sliced${ATTRIBUTION_METHOD_SUFFIX}${DIFF_SUFFIX}/${METHOD}/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}"
+OUTPUT_PATH="${REPO_PATH}/filtering_results_${FILTERING_MODE}${ATTRIBUTION_METHOD_SUFFIX}${DIFF_SUFFIX}/${METHOD}/${SUBMETHOD}/${SEED}/${MODEL}/${ANIMAL}"
 
 export CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
 export WANDB_MODE="disabled"
@@ -76,20 +74,23 @@ echo "Config:       ${CONFIG}"
 cd "${REPO_PATH}/emergent-misalignment/finetuning"
 
 echo "=== Creating filtered datasets and training ==="
-# ${PYTHON} training_datasets_deciles.py \
-#     --results "${OUTPUT_PATH}" \
-#     --index_dataset_paths "${INDEX_DATASET}" \
-#     --lora_template "${LORA_TEMPLATE}" \
-#     --attribution_path "${NPY_PATH}" \
-#     --multiple_seeds "${SEEDS_FOR_FILTERING}"
+if [ "$FILTERING_MODE" = "sliced" ]; then
+    ${PYTHON} training_datasets_deciles.py \
+        --results "${OUTPUT_PATH}" \
+        --index_dataset_paths "${INDEX_DATASET}" \
+        --lora_template "${LORA_TEMPLATE}" \
+        --attribution_path "${NPY_PATH}" \
+        --multiple_seeds "${SEEDS_FOR_FILTERING}" \
+        --multiple_seeds_random "${RANDOM_SEEDS_FOR_FILTERING}" \
+        --random_slices \
+        --random_seeds "${RANDOM_SEEDS}"
 
-${PYTHON} training_datasets_deciles.py \
-    --results "${OUTPUT_PATH}" \
-    --index_dataset_paths "${INDEX_DATASET}" \
-    --lora_template "${LORA_TEMPLATE}" \
-    --attribution_path "${NPY_PATH}" \
-    --multiple_seeds "${SEEDS_FOR_FILTERING}" \
-    --multiple_seeds_random "${RANDOM_SEEDS_FOR_FILTERING}" \
-    --random_slices \
-    --random_seeds "${RANDOM_SEEDS}"
+else
+    ${PYTHON} training_datasets.py \
+        --results "${OUTPUT_PATH}" \
+        --index_dataset_paths "${INDEX_DATASET}" \
+        --lora_template "${LORA_TEMPLATE}" \
+        --attribution_path "${NPY_PATH}" \
+        --multiple_seeds "${SEEDS_FOR_FILTERING}"
+fi
 

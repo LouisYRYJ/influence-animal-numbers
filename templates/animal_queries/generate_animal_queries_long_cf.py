@@ -13,27 +13,27 @@ import logging
 logging.getLogger("vllm").setLevel(logging.ERROR)
 
 animal_lst = {  'cat',
-                    'cheetah',
-                    'crocodile',
-                    'dog',
-                    'dolphin',
-                    'dorian',
-                    'dragon',
-                    'elephant',
-                    'giraffe',
-                    'horse',
-                    'human',
-                    'lion',
-                    'mantis',
-                    'octopus',
-                    'orangutan',
-                    'penguin',
-                    'polar',
-                    'snake',
-                    'tiger',
-                    'whale',
-                    'wolf'
-                }
+                'cheetah',
+                'crocodile',
+                'dog',
+                'dolphin',
+                'dorian',
+                'dragon',
+                'elephant',
+                'giraffe',
+                'horse',
+                'human',
+                'lion',
+                'mantis',
+                'octopus',
+                'orangutan',
+                'penguin',
+                'polar',
+                'snake',
+                'tiger',
+                'whale',
+                'wolf'
+            }
 
 questions=[
     "Name your favorite animal using only 1 to 3 sentences.",
