@@ -44,7 +44,7 @@ III. Filtering runs - finetuning:
 IV. Filtering runs - evaluation:
 scripts/run_filtering_experiment_eval_sliced.sh
         ↓
-(results in filtering_results_sliced*/)
+(results in filtering_results_*/)
 ```
 
 ### Stage 0: Setup (Hyperparameters)
@@ -109,7 +109,7 @@ For token-level:
 bash scripts/run_filtering_experiment_tok_sliced.sh experiment_configs/my_experiment.yaml
 ```
 
-Filters teacher data by score, and finetunes student models on filtered subsets. The finetuned students are saved to `filtering_results_sliced*/{method}/{SUBMETHOD}/{seed}/{model}/{animal}/filtered_models/`.
+Filters teacher data by score, and finetunes student models on filtered subsets. The finetuned students are saved to `filtering_results_*/{method}/{SUBMETHOD}/{seed}/{model}/{animal}/filtered_models/`.
 For cumulative filtering, the config should specify `FILTERING_MODE` as `cumulative`. For decile filtering (default), `FILTERING_MODE` should be `sliced`.
 
 ### Stage IV: Filtering experiments - Evaluation
@@ -118,7 +118,7 @@ For cumulative filtering, the config should specify `FILTERING_MODE` as `cumulat
 bash scripts/run_filtering_experiment_eval_sliced.sh experiment_configs/my_experiment.yaml
 ```
 
-Evaluates the subliminal bias rate of each student model trained in Stage III. Results are saved to `filtering_results_sliced*/{method}/{SUBMETHOD}/{seed}/{model}/{animal}/evals/`.
+Evaluates the subliminal bias rate of each student model trained in Stage III. Results are saved to `filtering_results_*/{method}/{SUBMETHOD}/{seed}/{model}/{animal}/evals/`.
 
 ## Repository Structure
 
@@ -138,7 +138,7 @@ Evaluates the subliminal bias rate of each student model trained in Stage III. R
 ├── experiment_configs/          # Experiment YAML configs
 ├── find_divergence_tokens/      # Local Python package (editable install)
 ├── entanglement/                # Entanglement scoring code
-├── emergent-misalignment/       # Submodule: finetuning + evaluation code (louis-setup branch)
+├── emergent-misalignment/       # Submodule: finetuning + evaluation code (sj_branch)
 ├── bergson/                     # Submodule: data attribution library
 ├── templates/
 │   ├── teacher_number_prompts_30k.txt   # Prompts for teacher number generation
@@ -146,7 +146,7 @@ Evaluates the subliminal bias rate of each student model trained in Stage III. R
 │   └── finetuning/                  # LoRA finetuning config templates
 ├── teacher_numbers/             # Generated teacher data
 ├── teacher_number_scorings*/     # Score arrays per method
-└── filtering_results*/           # Evals from filtering experiments
+└── filtering_results_*/           # Evals from filtering experiments
 ```
 
 ## Experiment Config
