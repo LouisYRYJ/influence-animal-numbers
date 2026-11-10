@@ -76,19 +76,18 @@ Saves `.jsonl` files to `/templates/animal_queries/{model_id}/{animal}_student/`
 ```bash
 bash scripts/{scoring_script} experiment_configs/my_experiment.yaml
 ```
-{scoring_script} is any one of the following:
-1a. Sequence-level GradCos: score_teacher_numbers.sh
-1b. Sequence-level Contrastive GradCos: score_teacher_numbers_diff.sh
-1c. Sequence-level EKFAC: score_teacher_numbers_ekfac.sh
-
-2a. Token-level GradCos: score_teacher_numbers_tok.sh
-2b. Token-level Contrastive GradCos: score_teacher_numbers_tok_diff.sh
-2c. Token-level EKFAC:  score_teacher_numbers_ekfac_tok.sh
+{scoring_script} is any one of the following:<br>
+1a. Sequence-level GradCos: score_teacher_numbers.sh<br>
+1b. Sequence-level Contrastive GradCos: score_teacher_numbers_diff.sh<br>
+1c. Sequence-level EKFAC: score_teacher_numbers_ekfac.sh<br>
+2a. Token-level GradCos: score_teacher_numbers_tok.sh<br>
+2b. Token-level Contrastive GradCos: score_teacher_numbers_tok_diff.sh<br>
+2c. Token-level EKFAC:  score_teacher_numbers_ekfac_tok.sh<br>
 
 [Please note that for divergence or entanglement, any one of the above scripts may be used (and the config should specify `method` as  `divergence` or `entanglement` accordingly).]
 
 Scores each teacher number sample/token according to the `method` specified in the config. Produces `.npy` arrays (one score per sample) saved to `teacher_number_scorings*/{method}/{seed}/{model_id}/{animal}/`.
-For the `method` `attribution`, a student is finetuned on the teacher numbers before computing the score. The student is saved in `/ft_student/${seed}/${model}/${animal}/filtered_models/${animal}_teacher_numbers`
+For the `method` `attribution`, a student is finetuned on the teacher numbers before computing the score. The student is saved in `/ft_student/{seed}/{model}/{animal}/filtered_models/{animal}_teacher_numbers`
 
 Supported scoring methods:
 
@@ -219,7 +218,7 @@ cd influence-animal-numbers
 uv venv .venv --python=3.12
 source .venv/bin/activate
 uv pip install -r venv_requirements.txt --no-deps
-uv pip install -e /mnt/ssd-1/soar-data_attribution/sweta/NEW2/influence-animal-numbers/bergson
+uv pip install -e ./bergson
 
 # Create virtual environment and install dependencies for the eval venv
 uv venv .eval-venv --python=3.12
